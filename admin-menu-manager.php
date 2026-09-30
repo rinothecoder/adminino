@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name: Admin Menu Manager
- * Description: Controls the order, names and visibility of the WordPress admin menu (left) and the admin bar (top). Settings under Settings > Menu Editor.
- * Version: 1.0.0
+ * Plugin Name: Admin Manager
+ * Description: Controls the WordPress admin: order, names and visibility of the left menu and the admin bar, a custom color scheme, and your logos in the menu and on the login page. Settings under Settings > Admin Manager.
+ * Version: 1.1.0
  * Author: Rino de Boer
  * Requires PHP: 7.4
  * Update URI: https://github.com/rinothecoder/wp-admin-manager
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) { exit; }
 if (class_exists('MK_Admin_Menu', false)) {
   // The old snippet version is still active. Turn it off in Fluent Snippets first.
   add_action('admin_notices', function () {
-    echo '<div class="notice notice-warning"><p><strong>Admin Menu Manager:</strong> the Fluent Snippets version is still active. Deactivate that snippet so the plugin can run.</p></div>';
+    echo '<div class="notice notice-warning"><p><strong>Admin Manager:</strong> the Fluent Snippets version is still active. Deactivate that snippet so the plugin can run.</p></div>';
   });
 } else {
 final class MK_Admin_Menu {
@@ -39,6 +39,8 @@ final class MK_Admin_Menu {
   private static function t_html($s) {
     return wp_kses(self::t($s), ['strong' => []]);
   }
+  public static function tr($s) { return self::t($s); }
+  public static function tr_html($s) { return self::t_html($s); }
 
   public static function init() {
     add_action('admin_menu', [__CLASS__, 'add_page']);
@@ -122,7 +124,7 @@ final class MK_Admin_Menu {
     return '<div class=~ame-cols~ aria-hidden=~true~><span>' . implode('</span><span>', array_map('esc_html', $c)) . '</span></div>';
   }
   public static function add_page() {
-    add_options_page(self::t('Menu Editor'), self::t('Menu Editor'), 'manage_options', self::SLUG, [__CLASS__, 'page']);
+    add_options_page(self::t('Admin Manager'), self::t('Admin Manager'), 'manage_options', self::SLUG, [__CLASS__, 'page']);
   }
   public static function capture() {
     global $menu, $submenu;
@@ -209,11 +211,31 @@ final class MK_Admin_Menu {
   // ---------- Top bar: apply ----------
   public static function bar_apply() {
     global $wp_admin_bar;
-    $s = get_option(self::BAR, []);
-    if (empty($s['lists']) || !is_object($wp_admin_bar)) { return; }
+    if (!is_object($wp_admin_bar)) { return; }
     $nodes = $wp_admin_bar->get_nodes();
     if (!$nodes) { return; }
-    foreach ($s['lists'] as $parent => $rows) {
+    // WordPress puts some dropdown items in a separate group (for example Themes and Menus under the site name on the
+    // website). A group is shown as its own block with extra space and often lands above the other items. The editor
+    // shows these items as one list, so merge each group into its dropdown to make the bar follow the editor.
+    $merged = [];
+    foreach ($nodes as $gid => $g) {
+      if (empty($g->group)) { continue; }
+      $p = (string) $g->parent;
+      if ($p === '' || !isset($nodes[$p]) || !empty($nodes[$p]->group)) { continue; }
+      foreach ($nodes as $cid => $c) {
+        if ((string) $c->parent === $gid && empty($c->group)) { $wp_admin_bar->add_node(['id' => $cid, 'parent' => $p]); }
+      }
+      $wp_admin_bar->remove_node($gid);
+      $merged[$gid] = $p;
+    }
+    $s = get_option(self::BAR, []);
+    if (empty($s['lists'])) { return; }
+    $lists = $s['lists'];
+    foreach ($merged as $gid => $p) {
+      if (!empty($lists[$gid])) { $lists[$p] = array_merge(isset($lists[$p]) ? $lists[$p] : [], $lists[$gid]); unset($lists[$gid]); }
+    }
+    $nodes = $wp_admin_bar->get_nodes();
+    foreach ($lists as $parent => $rows) {
       $order = [];
       foreach ($rows as $r) {
         $id = $r['slug'];
@@ -352,15 +374,24 @@ final class MK_Admin_Menu {
 
   public static function page() {
     if (!current_user_can('manage_options')) { return; }
-    $tab = (isset($_GET['tab']) && $_GET['tab'] === 'top') ? 'top' : 'left';
+    $tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : '';
+    if (!in_array($tab, ['top', 'colors', 'logos'], true)) { $tab = 'left'; }
     $base = admin_url('options-general.php?page=' . self::SLUG);
     $css = '<style>.ame ul{margin:0;padding:0;list-style:none;max-width:1200px}.ame-row{margin:0 0 6px}.ame-head{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #c3c4c7;border-radius:4px;padding:8px 12px}.ame-grip{cursor:grab;color:#8c8f94;font-size:16px;line-height:1;letter-spacing:-3px;user-select:none}.ame-title{flex:1;min-width:0}.ame-name{flex:1}.ame-muted{color:#8c8f94;font-style:italic}.ame-sep .ame-head{background:#f6f7f7;border-style:dashed}.ame-hide{white-space:nowrap}.ame-sub{margin:6px 0 10px 32px!important}.ame-ph{height:44px;border:1px dashed #2271b1;background:#f0f6fc;margin-bottom:6px}.ame-row:has(> .ame-head input[type=checkbox]:checked) > .ame-head{opacity:.55}.ame h2{margin:24px 0 8px}.ame .nav-tab-wrapper{margin-bottom:16px}.ame-url{flex:1 1 auto;min-width:0}.ame-custom .ame-title{flex:0 0 240px}.ame-reset{background:none;border:0;color:#2271b1;cursor:pointer;text-decoration:underline;padding:0 4px;font-size:13px}.ame-hide{min-width:100px}.ame-remove{background:none;border:0;color:#b32d2e;cursor:pointer;text-decoration:underline;padding:0 4px;font-size:13px}.ame-remove:hover{color:#8a1f1f}.ame-custom > .ame-head{border-left:3px solid #2271b1}.ame-title::placeholder{color:#8c8f94;font-style:italic;opacity:1}.ame-icon-note{color:#8c8f94;font-size:12px;font-style:italic;white-space:nowrap}.ame-where{font-size:11px;font-weight:600;line-height:1;padding:4px 8px;border-radius:10px;white-space:nowrap}.ame-where-a{background:#f0f0f1;color:#50575e}.ame-where-f{background:#e6f4ea;color:#1e6b34}.ame .ame-head,.ame-cols{display:grid;grid-template-columns:20px 36px minmax(160px,1fr) 170px 110px 64px;grid-template-areas:~grip tog name note where hide~;column-gap:12px;align-items:center}.ame-tab-left .ame-head,.ame-tab-left .ame-cols{grid-template-columns:20px 36px minmax(160px,1fr) 170px 64px;grid-template-areas:~grip tog name note hide~}.ame-head>.ame-grip{grid-area:grip}.ame-head>.ame-toggle,.ame-head>.ame-remove{grid-area:tog;justify-self:start}.ame-head>.ame-title,.ame-head>.ame-name{grid-area:name;width:100%;min-width:0}.ame-head>.ame-reset,.ame-head>.ame-icon-note{grid-area:note;justify-self:start}.ame-head>.ame-url{grid-area:note;width:100%;min-width:0}.ame-head>.ame-where{grid-area:where;justify-self:start}.ame-head>.ame-hide{grid-area:hide;justify-self:center;min-width:0;font-size:0}.ame-cols{max-width:1200px;box-sizing:border-box;padding:0 13px;margin:0 0 6px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:#646970}.ame-cols>span:last-child{justify-self:center}.ame-toggle{display:inline-flex;align-items:center;gap:1px;background:none;border:0;padding:2px;cursor:pointer;color:#2271b1;border-radius:3px}.ame-toggle:hover{background:#f0f6fc}.ame-toggle .dashicons{font-size:16px;width:16px;height:16px;transition:transform .15s}.ame-toggle.is-open .dashicons{transform:rotate(90deg)}.ame-count{font-size:11px;color:#646970}.ame-head>.ame-remove{padding:2px;text-decoration:none}.ame-remove .dashicons{font-size:16px;width:16px;height:16px}.ame-lang-nl .ame-head,.ame-lang-nl .ame-cols{grid-template-columns:20px 36px minmax(160px,1fr) 170px 110px 72px}.ame-lang-nl.ame-tab-left .ame-head,.ame-lang-nl.ame-tab-left .ame-cols{grid-template-columns:20px 36px minmax(160px,1fr) 170px 72px}@media(max-width:960px){.ame .ame-head{display:flex;flex-wrap:wrap}.ame-head>.ame-title{flex:1 1 200px}.ame-head>.ame-hide{font-size:13px}.ame-cols{display:none}}</style>';
     $js = '<script>jQuery(function($){$(~.ame-list~).sortable({handle:~.ame-grip~,items:~>li~,connectWith:($(~#ame-add~).length?~.ame-list~:false),placeholder:~ame-ph~,receive:function(e,ui){if(!ui.item.hasClass(~ame-custom~)){ui.sender.sortable(~cancel~)}}});$(~.ame-toggle~).on(~click~,function(){var o=$(this).toggleClass(~is-open~).hasClass(~is-open~);$(this).attr(~aria-expanded~,o?~true~:~false~).closest(~li~).children(~ul.ame-sub~).toggle(o)});$(document).on(~click~,~.ame-remove~,function(){var li=$(this).closest(~li~);if(li.hasClass(~ame-new~)){li.remove()}else{li.find(~.ame-del~).first().val(1);li.hide()}});function sy(i){var o=i.attr(~data-orig~);i.siblings(~.ame-reset~).toggle(o!==undefined&&i.val()!==o)}$(~.ame-title[data-orig]~).each(function(){sy($(this))}).on(~input~,function(){sy($(this))});$(document).on(~click~,~.ame-reset~,function(){var i=$(this).siblings(~.ame-title~);i.val(i.attr(~data-orig~));sy(i)});var n=0;$(~#ame-add~).on(~click~,function(){n++;var p=~bar[0][rows][~+(900+n)+~]~;var h=$(~<div>~).addClass(~ame-head~);h.append($(~<span>~).addClass(~ame-grip~).html(~&#8942;&#8942;~));h.append($(~<input>~).attr({type:~hidden~,name:p+~[slug]~,value:~new~}));h.append($(~<input>~).attr({type:~hidden~,name:p+~[pos]~,value:0}).addClass(~pos~));h.append($(~<input>~).attr({type:~text~,name:p+~[title]~,placeholder:~' . esc_js(self::t('Name')) . '~}).addClass(~ame-title~));h.append($(~<input>~).attr({type:~text~,name:p+~[url]~,list:~ame-urls~,placeholder:~' . esc_js(self::t('URL or admin page')) . '~}).addClass(~ame-url~));h.append($(~<input>~).attr({type:~hidden~,name:p+~[custom]~,value:1}));h.append($(~<button>~).attr({type:~button~,title:~' . esc_js(__('Delete')) . '~}).addClass(~ame-remove~).append($(~<span>~).addClass(~dashicons dashicons-trash~)));h.append($(~<label>~).addClass(~ame-hide~).append($(~<input>~).attr({type:~checkbox~,name:p+~[hidden]~,value:1})).append(document.createTextNode(~ ' . esc_js(self::t('Hide')) . '~)));var li=$(~<li>~).addClass(~ame-row ame-custom ame-new~).append(h);$(~ul.ame-first~).append(li);$(~.ame-list~).sortable(~refresh~);li[0].scrollIntoView({block:~center~});h.find(~.ame-title~).focus()});$(~.ame-form~).on(~submit~,function(){$(~.ame-title[data-orig]~).each(function(){if($(this).val()===$(this).attr(~data-orig~)){$(this).val(~~)}});$(~ul.ame-list~).each(function(){var idx=$(this).data(~idx~);$(this).children(~li~).each(function(i){var hd=$(this).children(~.ame-head~);hd.find(~input~).each(function(){var nm=this.name;if(nm&&nm.indexOf(~bar[~)===0){this.name=~bar[~+idx+~][rows][~+i+~]~+nm.substring(nm.lastIndexOf(~[~))}});hd.find(~.pos~).val(i)})})})});</script>';
-    $h = '<div class=~wrap ame ame-tab-' . $tab . ' ame-lang-' . self::lang() . '~><h1>' . esc_html(self::t('Menu Editor')) . '</h1><nav class=~nav-tab-wrapper~><a class=~nav-tab' . ($tab === 'left' ? ' nav-tab-active' : '') . '~ href=~' . esc_url($base) . '~>' . esc_html(self::t('Left Menu Editor')) . '</a><a class=~nav-tab' . ($tab === 'top' ? ' nav-tab-active' : '') . '~ href=~' . esc_url($base . '&tab=top') . '~>' . esc_html(self::t('Top Menu Editor')) . '</a></nav>';
+    $h = '<div class=~wrap ame ame-tab-' . $tab . ' ame-lang-' . self::lang() . '~><h1>' . esc_html(self::t('Admin Manager')) . '</h1><nav class=~nav-tab-wrapper~><a class=~nav-tab' . ($tab === 'left' ? ' nav-tab-active' : '') . '~ href=~' . esc_url($base) . '~>' . esc_html(self::t('Left Menu Editor')) . '</a><a class=~nav-tab' . ($tab === 'top' ? ' nav-tab-active' : '') . '~ href=~' . esc_url($base . '&tab=top') . '~>' . esc_html(self::t('Top Menu Editor')) . '</a><a class=~nav-tab' . ($tab === 'colors' ? ' nav-tab-active' : '') . '~ href=~' . esc_url($base . '&tab=colors') . '~>' . esc_html(self::t('Colors')) . '</a><a class=~nav-tab' . ($tab === 'logos' ? ' nav-tab-active' : '') . '~ href=~' . esc_url($base . '&tab=logos') . '~>' . esc_html(self::t('Logos')) . '</a></nav>';
     if (isset($_GET['saved'])) { $h .= '<div class=~notice notice-success is-dismissible~><p>' . esc_html(self::t('Saved.')) . '</p></div>'; }
     if (isset($_GET['reset'])) { $h .= '<div class=~notice notice-success is-dismissible~><p>' . esc_html(self::t('Reset to the defaults.')) . '</p></div>'; }
+    if ($tab === 'colors' || $tab === 'logos') {
+      // These tabs print their own markup with normal quotes.
+      echo strtr($css . $h, '~', chr(34)) . MK_AME_Design::tab($tab) . '</div>';
+      return;
+    }
     $h .= $tab === 'top' ? self::tab_top() : self::tab_left();
     $h .= '</div>';
+    // Hiding a parent also shows its sub items as hidden (ticked and locked). On save their own choice is sent,
+    // so unhiding the parent later brings them back exactly as they were.
+    $js .= '<script>jQuery(function($){function kids(cb){return $(cb).closest(~li~).children(~ul~).find(~.ame-head .ame-hide input[type=checkbox]~);}function sync(cb){var on=cb.checked;kids(cb).each(function(){var k=$(this);if(on){if(!k.prop(~disabled~)){k.data(~own~,this.checked);}this.checked=true;k.prop(~disabled~,true);}else if(k.prop(~disabled~)){this.checked=!!k.data(~own~);k.prop(~disabled~,false);}});}$(~.ame-head .ame-hide input[type=checkbox]~).filter(function(){return kids(this).length>0;}).each(function(){if(this.checked){sync(this);}}).on(~change~,function(){sync(this);});$(~.ame-form~).on(~submit~,function(){$(this).find(~.ame-hide input:disabled~).each(function(){this.checked=!!$(this).data(~own~);$(this).prop(~disabled~,false);});});});</script>';
     echo strtr($css . $h . $js, '~', chr(34));
   }
 
@@ -520,6 +551,8 @@ final class MK_Admin_Menu {
   }
 }
 MK_Admin_Menu::init();
+require_once __DIR__ . '/includes/design.php';
+MK_AME_Design::init();
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), function ($links) {
   array_unshift($links, '<a href="' . esc_url(admin_url('options-general.php?page=mk-admin-menu')) . '">' . esc_html__('Settings') . '</a>');
   return $links;

@@ -1,8 +1,8 @@
-# Admin Menu Manager
+# Admin Manager
 
-Controls the order, names and visibility of the WordPress admin menu (left) and the admin bar (top).
+Controls the WordPress admin: the order, names and visibility of the left menu and the admin bar, a custom color scheme, and your logos in the menu and on the login page.
 
-Settings live under **Settings > Menu Editor**.
+Settings live under **Settings > Admin Manager**, in four tabs: Left Menu Editor, Top Menu Editor, Colors and Logos.
 
 ## Features
 
@@ -11,6 +11,8 @@ Settings live under **Settings > Menu Editor**.
 - Add custom links to the admin bar (URL or admin page)
 - Add separators
 - Reset each editor back to the WordPress default
+- **Colors:** pick one main color and the plugin builds a full admin color scheme from it (based on the core Modern scheme, so the menu and admin bar stay dark). It's used for every user, and the login page button, links and input focus follow the same color. The generated CSS is cached in `wp-content/uploads/admin-manager/`
+- **Logos:** a white logo at the top of the left menu and a dark logo on the login page, each with a width slider and a live preview
 - English and Dutch interface, picked from the site language
 
 ## Languages
@@ -46,6 +48,10 @@ The plugin row gets a **Check for updates** link to skip the 6 hour cache.
 
 The updater renames GitHub's zip folder back to `admin-menu-manager`, so the plugin folder stays the same on every site.
 
+## Development
+
+Changes are tested on the dev site `plugins.testingwithpixels.com` before they are pushed and released.
+
 ## Moving from the snippet version
 
 If the old Fluent Snippets version is still active, the plugin shows a notice and stays inactive. Turn off the snippet and it takes over.
@@ -56,6 +62,8 @@ If the old Fluent Snippets version is still active, the plugin shows a notice an
 - `mk_ame_bar_settings` admin bar
 - `mk_ame_bar_seen` admin bar items seen so far
 - `mk_ame_bar_custom` custom admin bar links
+- `mk_ame_colors` color scheme (on/off and main color)
+- `mk_ame_logos` menu and login logos with their widths
 
 ## Requirements
 
