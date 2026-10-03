@@ -2,7 +2,9 @@
 
 Controls the WordPress admin: the order, names and visibility of the left menu and the admin bar, a custom color scheme, and your logos in the menu and on the login page.
 
-Settings live under **Settings > Admin Manager**, in four tabs: Left Menu Editor, Top Menu Editor, Colors and Logos.
+Settings live under **Admin Manager** in the left menu, in a side panel with four groups. **Visual**: Colors, Logos, Admin footer. **Navigation**: Left Menu Editor, Top Menu Editor. **Admin screens**: Dashboard, Notices. **Content**: Post ordering, Duplicate, SVG uploads. Export / import sits at the bottom, and the pages switch without reloading.
+
+The Left Menu Editor can be set per role and per user. A user's own menu goes before the menu of their role, and the role menu goes before the default. Menu items are only hidden, not blocked.
 
 ## Features
 
@@ -13,6 +15,12 @@ Settings live under **Settings > Admin Manager**, in four tabs: Left Menu Editor
 - Reset each editor back to the WordPress default
 - **Colors:** pick one main color and the plugin builds a full admin color scheme from it (based on the core Modern scheme, so the menu and admin bar stay dark). It's used for every user, and the login page button, links and input focus follow the same color. The generated CSS is cached in `wp-content/uploads/admin-manager/`
 - **Logos:** a white logo at the top of the left menu and a dark logo on the login page, each with a width slider and a live preview
+- **Post ordering:** drag and drop posts, pages and custom post types into your own order on their admin lists. All post types by default, or pick specific ones. The order is used on the website too, unless "Only in admin" is ticked. Stored in WordPress's own `menu_order` field
+- Side panel with an Overview. Everything new is off by default and loads nothing until switched on
+- Admin footer text, dashboard widget clean-up, notices bundled in one collapsible box
+- Duplicate link for posts and pages
+- SVG uploads (script checked, you choose which user roles may upload)
+- Export / import settings between sites (logos excluded)
 - English and Dutch interface, picked from the site language
 
 ## Languages
@@ -58,12 +66,16 @@ If the old Fluent Snippets version is still active, the plugin shows a notice an
 
 ## Stored options
 
-- `mk_ame_settings` left menu
+- `mk_ame_settings` left menu (the default)
+- `mk_ame_menu_scopes` left menu per role and per user
 - `mk_ame_bar_settings` admin bar
 - `mk_ame_bar_seen` admin bar items seen so far
 - `mk_ame_bar_custom` custom admin bar links
+- `mk_ame_extras` footer, dashboard, notices, duplicate and SVG settings
+- `mk_ame_dash_seen` dashboard widgets seen so far
 - `mk_ame_colors` color scheme (on/off and main color)
 - `mk_ame_logos` menu and login logos with their widths
+- `mk_ame_order` post ordering (all types or a selection, only in admin)
 
 ## Requirements
 
