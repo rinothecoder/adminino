@@ -1,6 +1,6 @@
 <?php
 /**
- * Admin Manager: Post ordering tab.
+ * Adminino: Post ordering tab.
  *
  * Drag and drop rows on the admin list screens (posts, pages, custom post types) to set their order.
  * The order is stored in WordPress's own menu_order field and, unless "Don't apply on the website" is ticked,

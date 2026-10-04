@@ -1,6 +1,6 @@
 <?php
 /**
- * Admin Manager: side panel and extra features.
+ * Adminino: side panel and extra features.
  *
  * Side panel navigation, Overview, Admin footer, Dashboard clean-up, Notices bundle, Duplicate,
  * SVG uploads and settings export / import.
@@ -640,7 +640,7 @@ CSS;
         ['media', 'media', 'SVG uploads', 'Allow SVG files in the media library.'],
       ]],
     ];
-    $h = self::head('Overview', 'Everything Admin Manager can do. Click Set up to open a feature and switch it on there. A feature that is off loads nothing.');
+    $h = self::head('Overview', 'Everything Adminino can do. Click Set up to open a feature and switch it on there. A feature that is off loads nothing.');
     $h .= '<div class="amx-ov" style="' . self::vars() . '">';
     foreach ($groups as $g) {
       foreach ($g[1] as $c) {
@@ -733,12 +733,12 @@ CSS;
 
   private static function tab_io() {
     $exp = wp_nonce_url(admin_url('admin-post.php?action=mk_ame_export'), 'mk_ame_export');
-    $h = self::head('Export / import', 'Copy the settings of Admin Manager to another website.');
+    $h = self::head('Export / import', 'Copy the settings of Adminino to another website.');
     if (isset($_GET['imported'])) { $h .= '<div class="notice notice-success inline"><p>' . esc_html(sprintf(self::t('Imported %d groups of settings.'), isset($_GET['n']) ? (int) $_GET['n'] : 0)) . '</p></div>'; }
     if (isset($_GET['import_error'])) { $h .= '<div class="notice notice-error inline"><p>' . esc_html(self::t('That file could not be imported.')) . '</p></div>'; }
-    $h .= '<p style="max-width:640px;margin:0">' . esc_html(self::t('Export saves everything you set up in Admin Manager (menus, colors, post ordering, footer, dashboard and more) in one small file. Import that file on another website that has Admin Manager, and it gets the same setup. Only Admin Manager settings are included, not your posts, pages or other plugins.')) . '</p>';
-    $h .= '<div class="amx-io"><div class="amx-io-c"><h3>' . esc_html(self::t('Export')) . '</h3><p>' . esc_html(self::t('Download your Admin Manager settings as a file.')) . '</p><div><a class="button button-primary" href="' . esc_url($exp) . '">' . esc_html(self::t('Export settings')) . '</a></div></div>';
-    $h .= '<div class="amx-io-c"><h3>' . esc_html(self::t('Import')) . '</h3><p>' . esc_html(self::t('Choose a settings file that you exported from Admin Manager. This replaces the settings on this site.')) . '</p>';
+    $h .= '<p style="max-width:640px;margin:0">' . esc_html(self::t('Export saves everything you set up in Adminino (menus, colors, post ordering, footer, dashboard and more) in one small file. Import that file on another website that has Adminino, and it gets the same setup. Only Adminino settings are included, not your posts, pages or other plugins.')) . '</p>';
+    $h .= '<div class="amx-io"><div class="amx-io-c"><h3>' . esc_html(self::t('Export')) . '</h3><p>' . esc_html(self::t('Download your Adminino settings as a file.')) . '</p><div><a class="button button-primary" href="' . esc_url($exp) . '">' . esc_html(self::t('Export settings')) . '</a></div></div>';
+    $h .= '<div class="amx-io-c"><h3>' . esc_html(self::t('Import')) . '</h3><p>' . esc_html(self::t('Choose a settings file that you exported from Adminino. This replaces the settings on this site.')) . '</p>';
     $h .= '<form method="post" enctype="multipart/form-data" action="' . esc_url(admin_url('admin-post.php')) . '" style="display:flex;flex-direction:column;gap:10px"><input type="hidden" name="action" value="mk_ame_import">' . wp_nonce_field('mk_ame_import', '_wpnonce', true, false);
     $h .= '<label class="amx-drop" id="amx-drop"><input type="file" name="file" accept=".json,application/json"><span id="amx-fn">' . esc_html(self::t('Choose a file')) . '</span></label>';
     $h .= '<div><button type="submit" class="button button-primary" id="amx-imp" disabled>' . esc_html(self::t('Import settings')) . '</button></div></form></div></div>';

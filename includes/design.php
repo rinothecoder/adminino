@@ -1,6 +1,6 @@
 <?php
 /**
- * Admin Manager: Colors and Logos tabs.
+ * Adminino: Colors and Logos tabs.
  *
  * Colors: one main color becomes a full admin color scheme. The scheme is generated from the
  * core "Modern" scheme (dark menu) by moving every shade of its highlight color to the new main color,
@@ -60,8 +60,8 @@ final class MK_AME_Design {
   }
   private static function logo_defaults() {
     return [
-      'menu_id' => 0, 'menu_w' => 120, 'menu_align' => 'center', 'menu_pad' => ['t' => 18, 'r' => 10, 'b' => 14, 'l' => 10],
-      'login_id' => 0, 'login_w' => 200, 'login_align' => 'center', 'login_pad' => ['t' => 0, 'r' => 0, 'b' => 25, 'l' => 0],
+      'menu_id' => 0, 'menu_w' => 120, 'menu_align' => 'center', 'menu_r' => 0, 'menu_pad' => ['t' => 10, 'r' => 10, 'b' => 14, 'l' => 10],
+      'login_id' => 0, 'login_w' => 200, 'login_align' => 'center', 'login_r' => 0, 'login_pad' => ['t' => 10, 'r' => 0, 'b' => 25, 'l' => 0],
     ];
   }
   private static function align($v, $def = 'center') {
@@ -170,7 +170,7 @@ final class MK_AME_Design {
     // The block editor and the newer screens only know the core scheme names. For any other scheme they fall back
     // to the default blue and write it as inline styles on their root elements ([data-wpds-root-provider]).
     // !important is the only thing that beats those inline values.
-    $css .= "\n/* Admin Manager: theme color and WordPress design tokens */\nbody.admin-color-" . self::SCHEME . ',[data-wpds-root-provider],[data-wpds-corner-radius]{' . implode(' !important;', $vars) . " !important}\n";
+    $css .= "\n/* Adminino: theme color and WordPress design tokens */\nbody.admin-color-" . self::SCHEME . ',[data-wpds-root-provider],[data-wpds-corner-radius]{' . implode(' !important;', $vars) . " !important}\n";
     return $css;
   }
   // WordPress 7 design tokens (--wpds-*): the newer admin screens (such as Settings > Connectors) use these
@@ -266,7 +266,7 @@ final class MK_AME_Design {
     global $_wp_admin_css_colors;
     $icons = isset($_wp_admin_css_colors['modern']) ? $_wp_admin_css_colors['modern']->icon_colors : ['base' => '#f3f1f1', 'focus' => '#fff', 'current' => '#fff'];
     $p = self::palette($c['main']);
-    wp_admin_css_color(self::SCHEME, 'Admin Manager', $url, ['#1e1e1e', '#3c3c3c', $p['main'], $p['light']], $icons);
+    wp_admin_css_color(self::SCHEME, 'Adminino', $url, ['#1e1e1e', '#3c3c3c', $p['main'], $p['light']], $icons);
     remove_action('admin_color_scheme_picker', 'admin_color_scheme_picker');
     add_action('admin_color_scheme_picker', [__CLASS__, 'picker_note']);
   }
@@ -275,7 +275,7 @@ final class MK_AME_Design {
     return $c['on'] ? self::SCHEME : $v;
   }
   public static function picker_note() {
-    echo '<p class="description">' . esc_html(self::t('Set by Admin Manager for all users.')) . '</p>';
+    echo '<p class="description">' . esc_html(self::t('Set by Adminino for all users.')) . '</p>';
   }
 
   // ---------- Logos ----------
@@ -303,7 +303,7 @@ final class MK_AME_Design {
   public static function admin_head() {
     $l = self::logos();
     if (!self::src($l['menu_id'])) { return; }
-    echo '<style>#adminmenu #mk-ame-logo{margin:0;padding:' . self::pad_css($l['menu_pad']) . ';text-align:' . $l['menu_align'] . ';line-height:0;box-sizing:border-box}#adminmenu #mk-ame-logo img{display:inline-block;max-width:100%;height:auto}.folded #adminmenu #mk-ame-logo{display:none}@media screen and (max-width:960px){.auto-fold #adminmenu #mk-ame-logo{display:none}}@media screen and (max-width:782px){.auto-fold #adminmenu #mk-ame-logo{display:block}}</style>';
+    echo '<style>#adminmenu #mk-ame-logo{margin:0;padding:' . self::pad_css($l['menu_pad']) . ';text-align:' . $l['menu_align'] . ';line-height:0;box-sizing:border-box}#adminmenu #mk-ame-logo img{display:inline-block;max-width:100%;height:auto;border-radius:' . (int) $l['menu_r'] . 'px}.folded #adminmenu #mk-ame-logo{display:none}@media screen and (max-width:960px){.auto-fold #adminmenu #mk-ame-logo{display:none}}@media screen and (max-width:782px){.auto-fold #adminmenu #mk-ame-logo{display:block}}</style>';
   }
   // Printed inside the left menu list, then moved to the top of it straight away.
   public static function menu_logo() {
@@ -323,7 +323,7 @@ final class MK_AME_Design {
       $d = self::dims($l['login_id']);
       $h = $d ? (int) round($w * $d[1] / $d[0]) : (int) round($w / 3);
       $margin = ['left' => '0 auto 0 0', 'center' => '0 auto', 'right' => '0 0 0 auto'];
-      $css .= '.login h1{padding:' . self::pad_css($l['login_pad']) . ';box-sizing:border-box}.login h1 a{background-image:url("' . esc_url($src) . '")!important;background-size:contain!important;background-position:center!important;background-repeat:no-repeat!important;width:' . $w . 'px!important;height:' . $h . 'px!important;max-width:100%;margin:' . $margin[$l['login_align']] . '!important}';
+      $css .= '.login h1{padding:' . self::pad_css($l['login_pad']) . ';box-sizing:border-box}.login h1 a{background-image:url("' . esc_url($src) . '")!important;background-size:contain!important;background-position:center!important;background-repeat:no-repeat!important;width:' . $w . 'px!important;height:' . $h . 'px!important;max-width:100%;border-radius:' . (int) $l['login_r'] . 'px;margin:' . $margin[$l['login_align']] . '!important}';
     }
     $c = self::colors();
     if ($c['on']) {
@@ -380,10 +380,12 @@ final class MK_AME_Design {
       'menu_id' => self::img_id(isset($_POST['menu_id']) ? $_POST['menu_id'] : 0),
       'menu_w' => $n('menu_w', 120, self::MENU_MIN, self::MENU_MAX),
       'menu_align' => self::align(sanitize_key((string) $post('menu_align'))),
+      'menu_r' => $n('menu_r', 0, 0, 200),
       'menu_pad' => self::pad(is_array($post('menu_pad')) ? $post('menu_pad') : [], $d['menu_pad']),
       'login_id' => self::img_id(isset($_POST['login_id']) ? $_POST['login_id'] : 0),
       'login_w' => $n('login_w', 200, self::LOGIN_MIN, self::LOGIN_MAX),
       'login_align' => self::align(sanitize_key((string) $post('login_align'))),
+      'login_r' => $n('login_r', 0, 0, 200),
       'login_pad' => self::pad(is_array($post('login_pad')) ? $post('login_pad') : [], $d['login_pad']),
     ]);
     self::back('logos', 'saved');
@@ -412,9 +414,9 @@ final class MK_AME_Design {
   }
 
   // Logo slot in a preview: the image, or a dashed placeholder.
-  private static function logo_slot($key, $src, $w, $align = 'center', $pad = null) {
+  private static function logo_slot($key, $src, $w, $align = 'center', $pad = null, $r = 0) {
     $st = 'text-align:' . self::align($align) . ($pad ? ';padding:' . self::pad_css($pad) : '');
-    $in = $src ? '<img src="' . esc_url($src) . '" alt="" style="width:' . (int) $w . 'px">' : '<span class="amd-ph" style="width:' . (int) $w . 'px">' . esc_html(self::t('Your logo')) . '</span>';
+    $in = $src ? '<img src="' . esc_url($src) . '" alt="" style="width:' . (int) $w . 'px;border-radius:' . (int) $r . 'px">' : '<span class="amd-ph" style="width:' . (int) $w . 'px;border-radius:' . (int) $r . 'px">' . esc_html(self::t('Your logo')) . '</span>';
     return '<div class="amd-logo-slot" data-logo="' . esc_attr($key) . '" style="' . esc_attr($st) . '">' . $in . '</div>';
   }
   // Placeholder admin screen: top bar, left menu (optionally with logo) and some content.
@@ -446,11 +448,11 @@ final class MK_AME_Design {
   private static function tab_colors() {
     $c = self::colors();
     $l = self::logos();
-    $h = '<h2 class="amx-t">' . esc_html(self::t('Colors')) . '</h2><p class="amd-intro">' . esc_html(self::t('Pick one main color. Admin Manager works out all the other shades (buttons, links, hover and focus states) and uses the scheme for every user. The left menu and the top bar stay dark.')) . '</p>';
+    $h = '<h2 class="amx-t">' . esc_html(self::t('Colors')) . '</h2><p class="amd-intro">' . esc_html(self::t('Pick one main color. Adminino works out all the other shades (buttons, links, hover and focus states) and uses the scheme for every user. The left menu and the top bar stay dark.')) . '</p>';
     $h .= self::form_start('mk_ame_save_colors') . '<table class="form-table" role="presentation"><tr><th scope="row">' . esc_html(self::t('Custom colors')) . '</th><td><label><input type="checkbox" name="on" value="1"' . checked($c['on'], 1, false) . '> ' . esc_html(self::t('Use this color scheme for all users')) . '</label><p class="description">' . esc_html(self::t('While this is on, users cannot pick their own color scheme on their profile page.')) . '</p></td></tr>';
     $h .= '<tr><th scope="row"><label for="amd-main">' . esc_html(self::t('Main color')) . '</label></th><td><input type="text" id="amd-main" name="main" class="amd-color" value="' . esc_attr($c['main']) . '" data-default-color="' . esc_attr(self::DEF_MAIN) . '"><p class="description">' . esc_html(self::t('The login page uses the main color too, for the login button, links and input focus.')) . '</p></td></tr></table>';
-    $menu = self::src($l['menu_id']) ? self::logo_slot('menu', self::src($l['menu_id']), $l['menu_w'], $l['menu_align'], $l['menu_pad']) : '';
-    $login = self::src($l['login_id']) ? self::logo_slot('login', self::src($l['login_id']), $l['login_w'], $l['login_align'], $l['login_pad']) : '';
+    $menu = self::src($l['menu_id']) ? self::logo_slot('menu', self::src($l['menu_id']), $l['menu_w'], $l['menu_align'], $l['menu_pad'], $l['menu_r']) : '';
+    $login = self::src($l['login_id']) ? self::logo_slot('login', self::src($l['login_id']), $l['login_w'], $l['login_align'], $l['login_pad'], $l['login_r']) : '';
     $h .= '<h3 class="amx-h3">' . esc_html(self::t('Preview')) . '</h3><div class="amd-prev" style="' . esc_attr(self::vars($c['main'])) . '"><div class="amd-prev-col"><h3>' . esc_html(self::t('Admin')) . '</h3>' . self::mock_admin($menu) . '</div><div class="amd-prev-col"><h3>' . esc_html(self::t('Login page')) . '</h3>' . self::mock_login($login) . '</div></div><p class="amd-note">' . esc_html(self::t('Placeholder content, only to show the colors.')) . '</p>';
     $h .= self::forms_end('mk_ame_save_colors', 'mk_ame_reset_colors');
     $h .= '<script>jQuery(function($){var O=' . wp_json_encode(self::orig()) . ',T="#7b90ff";' . self::js_color() . 'function paint(m){if(!/^#[0-9a-f]{6}$/i.test(m)){return;}var p=$(".amd-prev")[0],t=hsl(m),o=hsl(O),x=hsl(T);p.style.setProperty("--amd-main",m);p.style.setProperty("--amd-dark",hex(t[0],t[1],cl(t[2]-.1)));p.style.setProperty("--amd-light",hex(t[0],cl(t[1]+x[1]-o[1]),cl(t[2]+x[2]-o[2])));}$(".amd-color").wpColorPicker({change:function(e,ui){paint(ui.color.toString());},clear:function(){paint(' . wp_json_encode(self::DEF_MAIN) . ');}});});</script>';
@@ -479,7 +481,10 @@ final class MK_AME_Design {
     foreach (['t' => 'Top', 'r' => 'Right', 'b' => 'Bottom', 'l' => 'Left'] as $side => $label) {
       $h .= '<label><input type="number" class="amd-pad" data-side="' . $side . '" name="' . $key . '_pad[' . $side . ']" min="0" max="100" step="1" value="' . (int) $l[$key . '_pad'][$side] . '"><span>' . esc_html(self::t($label)) . '</span></label>';
     }
-    $h .= '</div></div></div></div>';
+    $h .= '</div></div>';
+    // Rounded corners
+    $h .= '<label class="amd-flabel" for="amd-' . $key . '-r">' . esc_html(self::t('Rounded corners')) . '</label><div class="amd-ctrl"><div class="amd-pads"><label><input type="number" id="amd-' . $key . '-r" class="amd-rad" data-key="' . $key . '" name="' . $key . '_r" min="0" max="200" step="1" value="' . (int) $l[$key . '_r'] . '"><span>px</span></label></div></div>';
+    $h .= '</div></div>';
     return $h;
   }
 
@@ -492,10 +497,10 @@ final class MK_AME_Design {
     $h .= self::logo_card('login', self::t('Login page logo'), 'Replaces the WordPress logo above the login form. The login page has a light background, so use a <strong>dark version</strong> of your logo. A PNG with a transparent background or an SVG works best.', self::t('The login form is 320px wide. Between 150 and 250px usually looks best.'), $l['login_id'], $l['login_w'], self::LOGIN_MIN, self::LOGIN_MAX, false);
     $h .= '</div>';
     $main = $c['on'] ? $c['main'] : self::DEF_MAIN;
-    $h .= '<h3 class="amx-h3">' . esc_html(self::t('Preview')) . '</h3><div class="amd-prev" style="' . esc_attr(self::vars($main)) . '"><div class="amd-prev-col"><h3>' . esc_html(self::t('Left menu')) . '</h3>' . self::mock_admin(self::logo_slot('menu', self::src($l['menu_id']), $l['menu_w'], $l['menu_align'], $l['menu_pad'])) . '</div><div class="amd-prev-col"><h3>' . esc_html(self::t('Login page')) . '</h3>' . self::mock_login(self::logo_slot('login', self::src($l['login_id']), $l['login_w'], $l['login_align'], $l['login_pad'])) . '</div></div><p class="amd-note">' . esc_html(self::t('Placeholder content. Only the logos and their sizes are real.')) . '</p>';
+    $h .= '<h3 class="amx-h3">' . esc_html(self::t('Preview')) . '</h3><div class="amd-prev" style="' . esc_attr(self::vars($main)) . '"><div class="amd-prev-col"><h3>' . esc_html(self::t('Left menu')) . '</h3>' . self::mock_admin(self::logo_slot('menu', self::src($l['menu_id']), $l['menu_w'], $l['menu_align'], $l['menu_pad'], $l['menu_r'])) . '</div><div class="amd-prev-col"><h3>' . esc_html(self::t('Login page')) . '</h3>' . self::mock_login(self::logo_slot('login', self::src($l['login_id']), $l['login_w'], $l['login_align'], $l['login_pad'], $l['login_r'])) . '</div></div><p class="amd-note">' . esc_html(self::t('Placeholder content. Only the logos and their sizes are real.')) . '</p>';
     $h .= self::forms_end('mk_ame_save_logos', 'mk_ame_reset_logos');
     $txt = ['title' => self::t('Choose a logo'), 'use' => self::t('Use this logo'), 'ph' => self::t('Your logo')];
-    $h .= '<script>jQuery(function($){var T=' . wp_json_encode($txt) . ';function size(k){var w=$("input[name="+k+"_w]").val();$("input[name="+k+"_w]").siblings("output").text(w+"px");$("[data-logo="+k+"] img,[data-logo="+k+"] .amd-ph").css("width",w+"px");}function set(k,url){$("[data-logo="+k+"]").each(function(){$(this).empty().append(url?$("<img>").attr({src:url,alt:""}):$("<span>").addClass("amd-ph").text(T.ph));});var b=$(".amd-pick[data-key="+k+"]");b.find(".amd-thumb").empty().append(url?$("<img>").attr({src:url,alt:""}):"");b.find(".amd-remove").toggle(!!url);size(k);}$(".amd-pick").each(function(){var b=$(this),k=b.data("key"),fr;b.find(".amd-choose").on("click",function(e){e.preventDefault();if(!fr){fr=wp.media({title:T.title,button:{text:T.use},library:{type:"image"},multiple:false});fr.on("select",function(){var a=fr.state().get("selection").first().toJSON();b.find("input[type=hidden]").val(a.id);set(k,a.url);});}fr.open();});b.find(".amd-remove").on("click",function(e){e.preventDefault();b.find("input[type=hidden]").val("");set(k,"");});});$(".amd-range input").on("input",function(){size($(this).data("key"));});function lay(k){var c=$(".amd-card-set[data-key="+k+"]"),a=c.find(".amd-seg input:checked").val()||"center",p=c.find(".amd-pad").map(function(){var v=parseInt(this.value,10);return(isNaN(v)?0:Math.max(0,Math.min(100,v)))+"px";}).get().join(" ");$("[data-logo="+k+"]").css({textAlign:a,padding:p});}$(".amd-seg input,.amd-pad").on("input change",function(){lay($(this).closest(".amd-card-set").data("key"));});});</script>';
+    $h .= '<script>jQuery(function($){var T=' . wp_json_encode($txt) . ';function size(k){var w=$("input[name="+k+"_w]").val();$("input[name="+k+"_w]").siblings("output").text(w+"px");$("[data-logo="+k+"] img,[data-logo="+k+"] .amd-ph").css("width",w+"px");var r=parseInt($("input[name="+k+"_r]").val(),10);r=isNaN(r)?0:Math.max(0,Math.min(200,r));$("[data-logo="+k+"] img,[data-logo="+k+"] .amd-ph").css("border-radius",r+"px");}function set(k,url){$("[data-logo="+k+"]").each(function(){$(this).empty().append(url?$("<img>").attr({src:url,alt:""}):$("<span>").addClass("amd-ph").text(T.ph));});var b=$(".amd-pick[data-key="+k+"]");b.find(".amd-thumb").empty().append(url?$("<img>").attr({src:url,alt:""}):"");b.find(".amd-remove").toggle(!!url);size(k);}$(".amd-pick").each(function(){var b=$(this),k=b.data("key"),fr;b.find(".amd-choose").on("click",function(e){e.preventDefault();if(!fr){fr=wp.media({title:T.title,button:{text:T.use},library:{type:"image"},multiple:false});fr.on("select",function(){var a=fr.state().get("selection").first().toJSON();b.find("input[type=hidden]").val(a.id);set(k,a.url);});}fr.open();});b.find(".amd-remove").on("click",function(e){e.preventDefault();b.find("input[type=hidden]").val("");set(k,"");});});$(".amd-range input,.amd-rad").on("input change",function(){size($(this).data("key"));});function lay(k){var c=$(".amd-card-set[data-key="+k+"]"),a=c.find(".amd-seg input:checked").val()||"center",p=c.find(".amd-pad").map(function(){var v=parseInt(this.value,10);return(isNaN(v)?0:Math.max(0,Math.min(100,v)))+"px";}).get().join(" ");$("[data-logo="+k+"]").css({textAlign:a,padding:p});}$(".amd-seg input,.amd-pad").on("input change",function(){lay($(this).closest(".amd-card-set").data("key"));});});</script>';
     return $h;
   }
 }

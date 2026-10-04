@@ -1,8 +1,8 @@
-# Admin Manager
+# Adminino
 
 Controls the WordPress admin: the order, names and visibility of the left menu and the admin bar, a custom color scheme, and your logos in the menu and on the login page.
 
-Settings live under **Admin Manager** in the left menu, in a side panel with four groups. **Visual**: Colors, Logos, Admin footer. **Navigation**: Left Menu Editor, Top Menu Editor. **Admin screens**: Dashboard, Notices. **Content**: Post ordering, Duplicate, SVG uploads. Export / import sits at the bottom, and the pages switch without reloading.
+Settings live under **Adminino** in the left menu, in a side panel with four groups. **Visual**: Colors, Logos, Admin footer. **Navigation**: Left Menu Editor, Top Menu Editor. **Admin screens**: Dashboard, Notices. **Content**: Post ordering, Duplicate, SVG uploads. Export / import sits at the bottom, and the pages switch without reloading.
 
 The Left Menu Editor can be set per role and per user. A user's own menu goes before the menu of their role, and the role menu goes before the default. Menu items are only hidden, not blocked.
 
