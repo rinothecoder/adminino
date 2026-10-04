@@ -1,10 +1,10 @@
 <?php
 /**
- * Minimal GitHub release updater for a private plugin repository.
+ * Minimal GitHub release updater.
  *
- * Add this line to wp-config.php on every site that should receive updates:
+ * The repository is public, so no setup is needed: every site checks the latest GitHub release.
+ * Only if the repository is ever made private again, add this line to wp-config.php on every site:
  *   define('MK_GITHUB_TOKEN', 'github_pat_...');   // read-only token, Contents: read
- * Without the constant nothing runs and no request is made.
  *
  * A release is a git tag such as v1.0.1 (GitHub "Release"). The tag must be higher than the Version header.
  */
@@ -24,7 +24,6 @@ final class MK_GitHub_Updater {
     $this->basename = plugin_basename($file);
     $this->repo = $repo;
     $this->token = defined('MK_GITHUB_TOKEN') ? (string) MK_GITHUB_TOKEN : '';
-    if ($this->token === '') { return; }
     add_filter('pre_set_site_transient_update_plugins', [$this, 'check']);
     add_filter('plugins_api', [$this, 'info'], 10, 3);
     add_filter('http_request_args', [$this, 'auth'], 10, 2);
@@ -36,10 +35,9 @@ final class MK_GitHub_Updater {
   private function key() { return 'mk_gh_release_' . md5($this->repo); }
 
   private function api($path) {
-    return wp_remote_get('https://api.github.com/repos/' . $this->repo . $path, [
-      'timeout' => 15,
-      'headers' => ['Accept' => 'application/vnd.github+json', 'Authorization' => 'Bearer ' . $this->token, 'User-Agent' => 'WordPress/' . get_bloginfo('version')],
-    ]);
+    $headers = ['Accept' => 'application/vnd.github+json', 'User-Agent' => 'WordPress/' . get_bloginfo('version')];
+    if ($this->token !== '') { $headers['Authorization'] = 'Bearer ' . $this->token; }
+    return wp_remote_get('https://api.github.com/repos/' . $this->repo . $path, ['timeout' => 15, 'headers' => $headers]);
   }
 
   // Latest release, cached for 6 hours (failures for 1 hour so a bad token does not hammer GitHub).
@@ -92,9 +90,9 @@ final class MK_GitHub_Updater {
     ];
   }
 
-  // GitHub zipball downloads of a private repo need the token.
+  // GitHub zipball downloads of a private repo need the token. A public repo needs none.
   public function auth($args, $url) {
-    if (strpos($url, 'https://api.github.com/repos/' . $this->repo . '/zipball') === 0) {
+    if ($this->token !== '' && strpos($url, 'https://api.github.com/repos/' . $this->repo . '/zipball') === 0) {
       $args['headers']['Authorization'] = 'Bearer ' . $this->token;
       $args['headers']['Accept'] = 'application/vnd.github+json';
     }

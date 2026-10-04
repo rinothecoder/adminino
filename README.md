@@ -35,16 +35,13 @@ add_filter('mk_ame_locale', fn() => 'en_US');
 
 ## Updates from GitHub
 
-This repo is private. Sites get updates through the built-in updater in `includes/updater.php`.
+This repo is public, so updates need no setup. Sites check the latest GitHub release through the built-in updater in `includes/updater.php`.
 
-1. Create a fine-grained GitHub token with read-only **Contents** access to this repo.
-2. Add it to `wp-config.php` on every site that should get updates:
+If the repo is ever made private again, create a fine-grained GitHub token with read-only **Contents** access and add it to `wp-config.php` on every site:
 
-   ```php
-   define('MK_GITHUB_TOKEN', 'github_pat_...');
-   ```
-
-3. Without the constant the updater does nothing and makes no requests.
+```php
+define('MK_GITHUB_TOKEN', 'github_pat_...');
+```
 
 The plugin row gets a **Check for updates** link to skip the 6 hour cache.
 
