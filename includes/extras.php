@@ -229,7 +229,7 @@ final class MK_AME_Extras {
   }
 
   private static function export_keys() {
-    return ['mk_ame_settings', 'mk_ame_menu_scopes', 'mk_ame_bar_settings', 'mk_ame_bar_settings_front', 'mk_ame_bar_custom', 'mk_ame_no_icons', 'mk_ame_fonts', 'mk_ame_icons', 'mk_ame_spacing', 'mk_ame_colors', 'mk_ame_order', self::OPT];
+    return ['mk_ame_settings', 'mk_ame_menu_scopes', 'mk_ame_bar_settings', 'mk_ame_bar_settings_front', 'mk_ame_bar_roles', 'mk_ame_bar_custom', 'mk_ame_no_icons', 'mk_ame_fonts', 'mk_ame_icons', 'mk_ame_spacing', 'mk_ame_colors', 'mk_ame_order', self::OPT];
   }
   public static function export() {
     if (!current_user_can('manage_options')) { wp_die(esc_html(self::t('You are not allowed to do this.'))); }
@@ -299,9 +299,10 @@ function revive(n){var s=n.querySelectorAll('script');for(var i=0;i<s.length;i++
 function swap(t,url,push){
 var d=new DOMParser().parseFromString(t,'text/html'),nw=d.querySelector('.wrap.ame'),old=wrap();
 if(!nw||!old){document.open();document.write(t);document.close();return;}
-var n=document.importNode(nw,true);old.parentNode.replaceChild(n,old);revive(n);
+var n=document.importNode(nw,true);old.parentNode.replaceChild(n,old);
 if(d.title){document.title=d.title;}
 if(push){try{history.pushState({amx:1},'',url);}catch(x){}}
+revive(n);
 var r=n.getBoundingClientRect();if(r.top<0){window.scrollTo(0,window.pageYOffset+r.top-50);}
 if(window.jQuery){jQuery(document).trigger('wp-updates-notice-added');}
 dirty=false;

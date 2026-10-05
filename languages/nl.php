@@ -302,4 +302,7 @@ return array (
   'Frontend' => 'Frontend',
   'Top bar on the frontend' => 'Bovenbalk op de frontend',
   'Admin fonts' => 'Admin-lettertypen',
+  'the default bar' => 'de standaardbalk',
+  '%s has its own top bar. This goes before the default.' => '%s heeft een eigen bovenbalk. Die gaat voor de standaard.',
+  '%s uses the default bar. View only. Click Customize to change it.' => '%s gebruikt de standaardbalk. Alleen bekijken. Klik op Aanpassen om hem te wijzigen.',
 );

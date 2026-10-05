@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Adminino
  * Description: Controls the WordPress admin: order, names and visibility of the left menu and the admin bar, a custom color scheme, your logos in the menu and on the login page, and drag and drop post ordering. Settings under Settings > Adminino.
- * Version: 1.3.0
+ * Version: 1.3.1
  * Author: Rino de Boer
  * Requires PHP: 7.4
  * Update URI: https://github.com/rinothecoder/wp-admin-manager
@@ -22,6 +22,7 @@ final class MK_Admin_Menu {
   const SEEN = 'mk_ame_bar_seen';
   const CUS = 'mk_ame_bar_custom';
   const BARF = 'mk_ame_bar_settings_front';
+  const BARR = 'mk_ame_bar_roles';
   const SPLIT = 'mk_ame_bar_split';
   const ICONS = 'mk_ame_no_icons';
   const SLUG = 'mk-admin-menu';
@@ -65,6 +66,7 @@ final class MK_Admin_Menu {
     add_action('deleted_user', [__CLASS__, 'user_deleted']);
     add_action('admin_post_mk_ame_save_bar', [__CLASS__, 'save_bar']);
     add_action('admin_post_mk_ame_reset_bar', [__CLASS__, 'reset_bar']);
+    add_action('admin_post_mk_ame_bar_role', [__CLASS__, 'bar_role_action']);
     add_action('admin_enqueue_scripts', [__CLASS__, 'assets']);
   }
 
@@ -232,7 +234,7 @@ final class MK_Admin_Menu {
       . '.amx-sg{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:22px;align-items:start}.amx-pv{position:sticky;top:52px}.amx-pv h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#646970}'
       . '.amx-pvs{background:#1d2327;border-radius:8px;padding:6px 0;color:#f0f0f1;min-height:80px}.amx-pvs div{display:flex;align-items:center;gap:10px;height:34px;padding:0 12px;font-size:14px}.amx-pvs i{width:16px;height:16px;border-radius:50%;background:#a7aaad;opacity:.8;flex:none}'
       . '.amx-pvs div.sub{height:28px;padding:0 12px 0 38px;font-size:13px;background:#2c3338;color:#c3c4c7}.amx-pvs div.sep{height:14px;padding:0}.amx-pvs div.cur{background:var(--wp-admin-theme-color,#2271b1);color:#fff}.amx-pvs div.cur i{background:#fff;opacity:1}.amx-pv p{color:#646970;font-size:12.5px;margin:8px 0 0}'
-      . '.amx-lock .ame-list{opacity:.5;pointer-events:none}'
+      . '.amx-lock .ame-list{opacity:.5;pointer-events:none}.amx-lock .ame-addp{display:none}'
       . '@media(max-width:900px){.amx-sg{grid-template-columns:1fr}.amx-pv{position:static}}</style>';
   }
   private static function scope_preview($sc) {
@@ -491,7 +493,7 @@ final class MK_Admin_Menu {
       $wp_admin_bar->remove_node($gid);
       $merged[$gid] = $p;
     }
-    $s = get_option(is_admin() ? self::BAR : self::BARF, []);
+    $s = self::bar_for_user(is_admin() ? 'admin' : 'front');
     if (empty($s['lists'])) { return; }
     $lists = $s['lists'];
     foreach ($merged as $gid => $p) {
@@ -606,10 +608,11 @@ final class MK_Admin_Menu {
         $out['lists'][$parent][] = ['slug' => $id, 'title' => sanitize_text_field(isset($r['title']) ? $r['title'] : ''), 'hidden' => (!empty($r['hidden']) && !self::locked($id)) ? 1 : 0];
       }
     }
-    update_option($ctx === 'front' ? self::BARF : self::BAR, $out);
+    $role = self::bar_role_req();
+    if ($role !== 'all') { $rr = self::bar_roles(); $rr[$ctx][$role] = $out; update_option(self::BARR, $rr); }
+    else { update_option($ctx === 'front' ? self::BARF : self::BAR, $out); }
     update_option(self::CUS, $cus);
-    wp_safe_redirect(add_query_arg(['page' => self::SLUG, 'tab' => $ctx === 'front' ? 'topfront' : 'top', 'saved' => 1], admin_url('admin.php')));
-    exit;
+    self::bar_back($ctx, $role, 'saved');
   }
     public static function reset_bar() {
     if (!current_user_can('manage_options')) { wp_die(self::t('Access denied.')); }
@@ -620,13 +623,81 @@ final class MK_Admin_Menu {
     exit;
   }
 
+  // ---------- Top bar per role ----------
+  // The default lists live in BAR / BARF. A role can have its own lists in BARR[ctx][role].
+  private static function bar_roles() {
+    $r = get_option(self::BARR, []);
+    return is_array($r) ? $r : [];
+  }
+  private static function bar_role_req() {
+    $role = isset($_REQUEST['role']) ? sanitize_key(wp_unslash($_REQUEST['role'])) : 'all';
+    return ($role !== 'all' && isset(wp_roles()->get_names()[$role])) ? $role : 'all';
+  }
+  private static function bar_cfg($ctx, $role = 'all') {
+    if ($role !== 'all') { $r = self::bar_roles(); if (isset($r[$ctx][$role]) && is_array($r[$ctx][$role])) { return $r[$ctx][$role]; } }
+    $s = get_option($ctx === 'front' ? self::BARF : self::BAR, []);
+    return is_array($s) ? $s : [];
+  }
+  private static function bar_for_user($ctx) {
+    $u = wp_get_current_user();
+    $r = self::bar_roles();
+    if ($u && $u->exists()) { foreach ((array) $u->roles as $role) { if (isset($r[$ctx][$role]) && is_array($r[$ctx][$role])) { return $r[$ctx][$role]; } } }
+    return self::bar_cfg($ctx);
+  }
+  private static function bar_back($ctx, $role, $flag) {
+    $args = ['page' => self::SLUG, 'tab' => $ctx === 'front' ? 'topfront' : 'top', $flag => 1];
+    if ($role !== 'all') { $args['role'] = $role; }
+    wp_safe_redirect(add_query_arg($args, admin_url('admin.php')));
+    exit;
+  }
+  public static function bar_role_action() {
+    if (!current_user_can('manage_options')) { wp_die(self::t('Access denied.')); }
+    check_admin_referer('mk_ame_bar_role');
+    $ctx = (isset($_POST['ctx']) && $_POST['ctx'] === 'front') ? 'front' : 'admin';
+    $role = self::bar_role_req();
+    $op = isset($_POST['op']) ? sanitize_key($_POST['op']) : '';
+    $r = self::bar_roles();
+    $flag = 'saved';
+    if ($role !== 'all' && $op === 'customize' && !isset($r[$ctx][$role])) { $r[$ctx][$role] = self::bar_cfg($ctx); }
+    if ($role !== 'all' && $op === 'reset') { unset($r[$ctx][$role]); if (empty($r[$ctx])) { unset($r[$ctx]); } $flag = 'reset'; }
+    if ($r) { update_option(self::BARR, $r); } else { delete_option(self::BARR); }
+    self::bar_back($ctx, $role, $flag);
+  }
+  // Role picker above the top bar editor, the same idea as in the left menu.
+  private static function bar_scope($ctx, $role) {
+    $tab = $ctx === 'front' ? 'topfront' : 'top';
+    $base = admin_url('admin.php?page=' . self::SLUG . '&tab=' . $tab);
+    $r = self::bar_roles();
+    $own = $role !== 'all' && isset($r[$ctx][$role]);
+    $o = '<option value=~' . esc_url($base) . '~' . selected($role, 'all', false) . '>' . esc_html(self::t('Everyone (default)')) . '</option>';
+    foreach (wp_roles()->get_names() as $slug => $n) {
+      $o .= '<option value=~' . esc_url($base . '&role=' . $slug) . '~' . selected($role, $slug, false) . '>' . esc_html(translate_user_role($n)) . (isset($r[$ctx][$slug]) ? ' &bull;' : '') . '</option>';
+    }
+    $form = function ($op, $btn, $cls, $confirm = '') use ($ctx, $role) {
+      return '<form method=~post~ action=~' . esc_url(admin_url('admin-post.php')) . '~ class=~amx-inl~' . ($confirm ? ' onsubmit=~return confirm(&quot;' . esc_attr($confirm) . '&quot;)~' : '') . '><input type=~hidden~ name=~action~ value=~mk_ame_bar_role~><input type=~hidden~ name=~op~ value=~' . $op . '~><input type=~hidden~ name=~ctx~ value=~' . $ctx . '~><input type=~hidden~ name=~role~ value=~' . esc_attr($role) . '~>' . wp_nonce_field('mk_ame_bar_role', '_wpnonce', false, false) . '<button type=~submit~ class=~' . $cls . '~>' . esc_html($btn) . '</button></form>';
+    };
+    $name = $role === 'all' ? '' : self::role_label($role);
+    $act = '';
+    if ($role !== 'all') {
+      $act = $own ? $form('reset', sprintf(self::t('Back to %s'), self::t('the default bar')), 'button', sprintf(self::t('Remove these settings and go back to %s?'), self::t('the default bar'))) : $form('customize', sprintf(self::t('Customize for %s'), $name), 'button button-primary');
+    }
+    $h = '<div class=~amx-scope~><label>' . esc_html(self::t('Role')) . '<select onchange=~window.amxGo?amxGo(this.value):location.href=this.value~>' . $o . '</select></label><span class=~amx-act~>' . $act . '</span></div>';
+    if ($role !== 'all') {
+      $state = $own ? sprintf(self::t('%s has its own top bar. This goes before the default.'), $name) : sprintf(self::t('%s uses the default bar. View only. Click Customize to change it.'), $name);
+      $h .= '<p class=~amx-state~><span class=~amx-chip' . ($own ? ' own' : '') . '~>' . esc_html(self::t($own ? 'Own settings' : 'Inherited')) . '</span>' . esc_html($state) . '</p>';
+    } else {
+      $h .= '<div style=~height:18px~></div>';
+    }
+    return $h;
+  }
+
   // ---------- Custom links in the top bar ----------
   private static function custom_links() {
     $c = get_option(self::CUS, []);
     return is_array($c) ? $c : [];
   }
   public static function bar_custom($bar) {
-    if (!current_user_can('manage_options')) { return; }
+    if (!is_user_logged_in()) { return; }
     foreach (self::custom_links() as $c) {
       $w = isset($c['where']) ? $c['where'] : 'both';
       if (!self::$sim && (is_admin() ? $w === 'front' : $w === 'admin')) { continue; }
@@ -884,7 +955,10 @@ final class MK_Admin_Menu {
       while ($p !== '' && isset($nodes[$p]) && $guard++ < 8) { $keep[$p] = 1; $p = $nodes[$p]['p']; }
     }
     $nodes = array_intersect_key($nodes, $keep);
-    $s = get_option($ctx === 'front' ? self::BARF : self::BAR, []);
+    $role = self::bar_role_req();
+    $rr = self::bar_roles();
+    $locked = $role !== 'all' && !isset($rr[$ctx][$role]);
+    $s = self::bar_cfg($ctx, $role);
     $sm = isset($s['lists']) && is_array($s['lists']) ? $s['lists'] : [];
     $kids = [];
     self::$gb = [];
@@ -909,9 +983,11 @@ final class MK_Admin_Menu {
       if ($p === '' || !isset($nodes[$p]) || ($isg && $nodes[$p]['p'] === '')) { $roots[] = $p; }
     }
     usort($roots, function ($a, $b) { return ($a === '' ? 0 : 1) - ($b === '' ? 0 : 1); });
-    $h = '<h2 class=~amx-t~>' . esc_html(self::t($ctx === 'front' ? 'Top bar on the frontend' : 'Top bar in the admin')) . '</h2><p class=~amx-lead~>' . esc_html(self::t($ctx === 'front' ? 'The black bar on your website, shown to logged-in users. Drag to reorder, rename, or hide items.' : 'The black bar at the top of the admin. Drag to reorder, rename, or hide items.')) . '</p>';
-    if ($ctx === 'front') { $h .= '<p class=~description~>' . esc_html(self::t('Only items that have shown up on your website are listed. Visit the website while logged in to see more.')) . '</p>'; }
-    $h .= MK_AME_Look::quick_icons($ctx === 'front' ? 'topfront' : 'top') . self::bar_preview();
+    $head = '<h2 class=~amx-t~>' . esc_html(self::t($ctx === 'front' ? 'Top bar on the frontend' : 'Top bar in the admin')) . '</h2><p class=~amx-lead~>' . esc_html(self::t($ctx === 'front' ? 'The black bar on your website, shown to logged-in users. Drag to reorder, rename, or hide items.' : 'The black bar at the top of the admin. Drag to reorder, rename, or hide items.')) . '</p>';
+    if ($ctx === 'front') { $head .= '<p class=~description~>' . esc_html(self::t('Only items that have shown up on your website are listed. Visit the website while logged in to see more.')) . '</p>'; }
+    // The role picker and the icon switch are forms of their own, so they sit outside the list form.
+    $head .= self::bar_scope($ctx, $role) . MK_AME_Look::quick_icons($ctx === 'front' ? 'topfront' : 'top');
+    $h = self::bar_preview();
     $k = 0;
     foreach ($roots as $p) {
       $title = $p === '' ? self::t('Top bar: left side') : ($p === 'top-secondary' ? self::t('Top bar: right side') : $p);
@@ -922,8 +998,8 @@ final class MK_Admin_Menu {
     foreach (['plugins.php' => self::t('Plugins'), 'themes.php' => self::t('Themes'), 'edit.php?post_type=page' => self::t('Pages'), 'upload.php' => self::t('Media'), 'users.php' => self::t('Users'), 'options-general.php' => self::t('Settings'), 'site-editor.php' => self::t('Site Editor'), 'admin.php?page=fluent-snippets' => 'Fluent Snippets', 'admin.php?page=fluent-cart' => 'FluentCart', 'admin.php?page=fluent-booking' => 'Fluent Booking'] as $u => $l) { $dl .= '<option value=~' . esc_attr($u) . '~>' . esc_html($l) . '</option>'; }
     foreach ((array) get_pages(['number' => 50]) as $pg) { $dl .= '<option value=~' . esc_attr(get_permalink($pg)) . '~>' . esc_html($pg->post_title) . '</option>'; }
     $h .= $dl . '</datalist>';
-    $hid = '<input type=~hidden~ name=~ctx~ value=~' . $ctx . '~>';
-    return self::forms($h, 'mk_ame_save_bar', 'mk_ame_reset_bar', $hid, true, true, $hid) . (self::$barico ? MK_AME_Look::picker_assets() : '');
+    $hid = '<input type=~hidden~ name=~ctx~ value=~' . $ctx . '~><input type=~hidden~ name=~role~ value=~' . esc_attr($role) . '~>';
+    return self::scope_css() . $head . '<div class=~' . ($locked ? 'amx-lock' : '') . '~>' . self::forms($h, 'mk_ame_save_bar', 'mk_ame_reset_bar', $hid, $role === 'all', !$locked, $hid) . '</div>' . (self::$barico ? MK_AME_Look::picker_assets() : '');
   }
 }
 MK_Admin_Menu::init();
