@@ -14,7 +14,7 @@ if (!class_exists('MK_AME_Extras', false)) {
 final class MK_AME_Extras {
   const OPT = 'mk_ame_extras';
   const SEEN = 'mk_ame_dash_seen';
-  const TABS = ['overview', 'footer', 'dash', 'notices', 'dup', 'media', 'io'];
+  const TABS = ['overview', 'footer', 'dash', 'notices', 'dup', 'media', 'io', 'fonts', 'icons', 'baricons', 'spacing'];
 
   public static function init() {
     add_action('admin_post_mk_ame_save_extras', [__CLASS__, 'save']);
@@ -229,7 +229,7 @@ final class MK_AME_Extras {
   }
 
   private static function export_keys() {
-    return ['mk_ame_settings', 'mk_ame_menu_scopes', 'mk_ame_bar_settings', 'mk_ame_bar_custom', 'mk_ame_colors', 'mk_ame_order', self::OPT];
+    return ['mk_ame_settings', 'mk_ame_menu_scopes', 'mk_ame_bar_settings', 'mk_ame_bar_settings_front', 'mk_ame_bar_custom', 'mk_ame_no_icons', 'mk_ame_fonts', 'mk_ame_icons', 'mk_ame_spacing', 'mk_ame_colors', 'mk_ame_order', self::OPT];
   }
   public static function export() {
     if (!current_user_can('manage_options')) { wp_die(esc_html(self::t('You are not allowed to do this.'))); }
@@ -255,6 +255,8 @@ final class MK_AME_Extras {
     foreach (self::export_keys() as $k) {
       if (isset($j['options'][$k]) && is_array($j['options'][$k])) { update_option($k, $j['options'][$k]); $n++; }
     }
+    // A file from before the split has one top bar list: let the plugin split it again.
+    if (!isset($j['options']['mk_ame_bar_settings_front'])) { delete_option(MK_Admin_Menu::BARF); delete_option(MK_Admin_Menu::SPLIT); }
     self::back('io', 'imported', ['n' => $n]);
   }
 
@@ -263,8 +265,9 @@ final class MK_AME_Extras {
     $st = self::status();
     $groups = [
       ['', [['overview', 'Overview', false]]],
-      ['Visual', [['colors', 'Colors', $st['colors']], ['logos', 'Logos', $st['logos']], ['footer', 'Admin footer', $st['footer']]]],
-      ['Navigation', [['left', 'Left Menu Editor', $st['left']], ['top', 'Top Menu Editor', $st['top']]]],
+      ['Left menu', [['left', 'Items', $st['left']], ['spacing', 'Spacing', $st['spacing']], ['menulogo', 'Logo', $st['menulogo']]]],
+      ['Top bar', [['top', 'Admin', $st['top']], ['topfront', 'Frontend', $st['topfront']]]],
+      ['Look', [['colors', 'Colors', $st['colors']], ['fonts', 'Fonts', $st['fonts']], ['loginlogo', 'Login logo', $st['loginlogo']], ['footer', 'Admin footer', $st['footer']]]],
       ['Admin screens', [['dash', 'Dashboard', $st['dash']], ['notices', 'Notices', $st['notices']]]],
       ['Content', [['order', 'Post ordering', true], ['dup', 'Duplicate', $st['dup']], ['media', 'SVG uploads', $st['media']]]],
       ['Manage', [['io', 'Export / import', false]]],
@@ -316,7 +319,7 @@ swap(a[0],a[1],push);
 }
 function go(url){
 if(dirty&&!confirm(MSG)){return;}
-if(/[?&]tab=logos/.test(url)&&!(window.wp&&wp.media)){location.href=url;return;}
+if(/[?&]tab=(logos|menulogo|loginlogo|fonts)/.test(url)&&!(window.wp&&wp.media)){location.href=url;return;}
 load(url,null,true);
 }
 window.amxGo=go;
@@ -332,6 +335,7 @@ document.addEventListener('submit',function(e){
 var f=e.target,w=wrap();
 if(e.defaultPrevented||!w||!w.contains(f)){return;}
 if((f.getAttribute('action')||'').indexOf('admin-post.php')<0){return;}
+if(f.hasAttribute('data-amx-reload')){return;}
 e.preventDefault();
 var fd=new FormData(f);
 if(e.submitter&&e.submitter.name){fd.append(e.submitter.name,e.submitter.value);}
@@ -388,6 +392,10 @@ AMXJS;
       case 'dup': return self::tab_dup();
       case 'media': return self::tab_media();
       case 'io': return self::tab_io();
+      case 'fonts': return MK_AME_Look::tab_fonts();
+      case 'icons': return MK_AME_Look::tab_icons('left');
+      case 'baricons': return MK_AME_Look::tab_icons('bar');
+      case 'spacing': return MK_AME_Look::tab_spacing();
       default: return self::tab_overview();
     }
   }
@@ -395,11 +403,19 @@ AMXJS;
   private static function status() {
     $s = self::settings();
     $has = function ($o) { $v = get_option($o); return !empty($v); };
+    $cl = function ($w) { foreach ((array) get_option('mk_ame_bar_custom', []) as $c) { if ((isset($c['where']) ? $c['where'] : 'both') === $w) { return true; } } return false; };
     return [
       'left' => $has('mk_ame_settings') || $has('mk_ame_menu_scopes'),
-      'top' => $has('mk_ame_bar_settings') || $has('mk_ame_bar_custom'),
+      'top' => $has('mk_ame_bar_settings') || $cl('admin'),
+      'topfront' => $has('mk_ame_bar_settings_front') || $cl('front'),
       'colors' => $has('mk_ame_colors'),
       'logos' => $has('mk_ame_logos'),
+      'menulogo' => (bool) MK_AME_Design::logos()['menu_id'],
+      'loginlogo' => (bool) MK_AME_Design::logos()['login_id'],
+      'baricons' => (bool) MK_AME_Look::icons()['bar_on'],
+      'fonts' => (bool) MK_AME_Look::fonts()['on'],
+      'icons' => (bool) (MK_AME_Look::icons()['on'] || get_option('mk_ame_no_icons')),
+      'spacing' => (bool) array_filter(MK_AME_Look::spacing()),
       'order' => true,
       'footer' => (bool) $s['footer']['on'],
       'dash' => (bool) $s['dash']['on'],
@@ -448,11 +464,13 @@ AMXJS;
     switch ($key) {
       case 'left':
         $inner = '<div class="sc-side" style="width:100%;padding:6px 0">';
-        $inner .= $mi($e(__('Dashboard')), 'cur', $grip) . $mi('<span class="sc-rn">Blog</span>', '', $grip) . $mi($e(__('Media')), 'lift', $grip) . $mi($e(__('Pages')), '', $grip);
-        $inner .= $mi('<s>' . $e(__('Comments')) . '</s> <span class="sc-tag">' . $e(self::t('Hide')) . '</span>', 'off', $grip) . $mi($e(__('Appearance')), '', $grip) . $mi($e(__('Plugins')), '', $grip) . '</div>';
+        $inner .= $mi($e(__('Dashboard')), 'cur', $grip) . $mi('Blog', '', $grip) . $mi($e(__('Media')), 'lift', $grip) . $mi($e(__('Pages')), '', $grip);
+        $inner .= $mi($e(__('Comments')), 'off', $grip) . $mi($e(__('Appearance')), '', $grip) . $mi($e(__('Plugins')), '', $grip) . '</div>';
         $o = $win('left:140px;top:14px;width:240px;background:#1d2327', $inner);
         break;
       case 'top':
+      case 'topfront':
+      case 'baricons':
         $user = wp_get_current_user();
         $howdy = sprintf(__('Howdy, %s'), ($user && $user->display_name) ? $user->display_name : 'Admin');
         $dd = '<div class="sc-dd"><div>' . $e(__('Post')) . '</div><div>' . $e(__('Media')) . '</div><div>' . $e(__('Page')) . '</div><div class="cu">' . $e(__('Custom Link')) . '</div></div>';
@@ -463,7 +481,44 @@ AMXJS;
         $inner = $bar . '<div class="sc-row"><div class="sc-side">' . $menu() . '</div><div class="sc-main"><div class="sc-h1">' . $e(__('Dashboard')) . '</div><div class="sc-card"><div class="sc-card-t">' . $e(__('Welcome to WordPress!')) . '</div><div class="sc-p">Lorem ipsum dolor sit amet, consectetur adipiscing elit sed do. <span class="sc-link">' . $e(__('Learn more')) . '</span></div></div><div class="sc-btn">' . $e(__('Save Changes')) . '</div></div></div>';
         $o = $win('left:20px;top:16px;right:0;bottom:0;border-radius:8px 0 0 0', $inner);
         break;
+      case 'fonts':
+        // A normal admin screen, all in a clearly different font, so it reads as the admin and not the website.
+        $inner = '<div class="sc-bar" style="gap:12px;color:#f0f0f1;font-size:13px"><span class="sc-dot"></span><span>' . $e($cut(get_bloginfo('name'), 16)) . '</span><span>+ ' . $e(__('New')) . '</span></div><div class="sc-row"><div class="sc-side">' . $menu(false) . '</div><div class="sc-main"><div class="sc-h1">' . $e(__('Dashboard')) . '</div><div class="sc-card"><div class="sc-card-t">' . $e(__('Welcome to WordPress!')) . '</div><div class="sc-p">Lorem ipsum dolor sit amet, consectetur adipiscing elit sed do.</div></div><div class="sc-btn">' . $e(__('Save Changes')) . '</div></div></div>';
+        $o = $win('left:20px;top:16px;right:0;bottom:0;border-radius:8px 0 0 0;font-family:Georgia,serif', $inner);
+        break;
+      case 'icons':
+        $lu = ['layout-dashboard' => __('Dashboard'), 'pin' => __('Posts'), 'image' => __('Media'), 'file' => __('Pages'), 'paintbrush' => __('Appearance'), 'plug' => __('Plugins'), 'settings' => __('Settings')];
+        $set = MK_AME_Look::ensure()['svg'];
+        $inner = '<div class="sc-side" style="width:100%;padding:6px 0">';
+        $first = true;
+        foreach ($lu as $ln => $lt) {
+          $ico = isset($set[$ln]) ? '<span style="display:flex;width:20px;height:20px;color:' . ($first ? '#fff' : '#a7aaad') . '">' . str_replace('<svg ', '<svg width="20" height="20" ', MK_AME_Look::svg($set[$ln], 2)) . '</span>' : '<span class="sc-dot"></span>';
+          $inner .= '<div class="sc-mi' . ($first ? ' cur' : '') . '">' . $ico . '<span>' . $e($lt) . '</span></div>';
+          $first = false;
+        }
+        $o = $win('left:140px;top:14px;width:240px;background:#1d2327', $inner . '</div>');
+        break;
+      case 'spacing':
+        $inner = '<div class="sc-side" style="width:100%;padding:10px 0">';
+        // Measuring lines like in a design tool: the gap between items and the padding in front of them.
+        $mc = 'var(--amx-main)';
+        $tag = function ($t, $pos) use ($mc) { return '<span style="position:absolute;' . $pos . ';font-size:10px;line-height:14px;padding:0 4px;border-radius:3px;background:' . $mc . ';color:#fff;font-weight:600">' . $t . '</span>'; };
+        $items = [__('Dashboard'), __('Posts'), __('Media'), __('Pages'), __('Plugins')];
+        foreach ($items as $si => $sl) {
+          $m = '';
+          if ($si > 0 && $si < count($items) - 1) {
+            $m .= '<span style="position:absolute;left:150px;top:100%;width:1px;height:12px;background:' . $mc . '"></span><span style="position:absolute;left:146px;top:100%;width:9px;height:1px;background:' . $mc . '"></span><span style="position:absolute;left:146px;top:calc(100% + 11px);width:9px;height:1px;background:' . $mc . '"></span>' . $tag('12', 'left:158px;top:calc(100% - 1px)');
+          }
+          if ($si === 2) {
+            $m .= '<span style="position:absolute;left:0;top:50%;width:30px;height:1px;background:' . $mc . '"></span><span style="position:absolute;left:0;top:calc(50% - 4px);width:1px;height:9px;background:' . $mc . '"></span><span style="position:absolute;left:29px;top:calc(50% - 4px);width:1px;height:9px;background:' . $mc . '"></span>' . $tag('30', 'left:4px;top:calc(50% - 18px)');
+          }
+          $inner .= '<div class="sc-mi' . ($si === 0 ? ' cur' : '') . '" style="padding-left:30px;margin-bottom:12px"><span class="sc-dot"></span><span>' . $e($sl) . '</span>' . $m . '</div>';
+        }
+        $o = $win('left:120px;top:14px;width:290px;background:#1d2327', $inner . '</div>');
+        break;
       case 'logos':
+      case 'menulogo':
+      case 'loginlogo':
         $side = '<div class="sc-side" style="padding-top:16px"><div class="sc-lg">LOGO</div>' . $menu(false) . '</div>';
         $login = '<div class="sc-login"><div class="sc-lg2">LOGO</div><div class="sc-form"><div class="sc-lbl">' . $e(__('Username or Email Address')) . '</div><div class="sc-in"></div><div class="sc-lbl">' . $e(__('Password')) . '</div><div class="sc-in foc"></div><div class="sc-fr"><span class="sc-chk"></span><span class="sc-p">' . $e(__('Remember Me')) . '</span><span class="sc-btn" style="margin-left:auto">' . $e(__('Log In')) . '</span></div></div></div>';
         $o = $win('left:20px;top:16px;width:168px;bottom:0;background:#1d2327;border-radius:8px 0 0 0', $side) . $win('left:204px;top:16px;right:0;bottom:0;border-radius:8px 0 0 0', $login);
@@ -567,8 +622,8 @@ AMXJS;
 .amx-sc .sc-new{position:relative;height:32px;line-height:32px;padding:0 12px;background:var(--amx-main);color:#fff;margin:0 -4px}
 .amx-sc .sc-dd{position:absolute;left:0;top:32px;width:180px;background:#2c3338;padding:6px 0;box-shadow:0 8px 20px rgba(0,0,0,.3)}
 .amx-sc .sc-dd div{padding:5px 14px;line-height:18px;color:#f0f0f1;font-size:13px}
-.amx-sc .sc-dd div.cu{border-left:3px solid var(--amx-main);padding-left:11px;color:var(--amx-light)}
-.amx-sc .sc-lg{margin:0 10px 14px;height:44px;border-radius:6px;background:var(--amx-main);color:#fff;font-weight:700;letter-spacing:.08em;display:flex;align-items:center;justify-content:center}
+.amx-sc .sc-dd div.cu{border-left:3px solid var(--amx-main);padding-left:11px;background:#fff;color:#1d2327;font-weight:600}
+.amx-sc .sc-lg{margin:0 10px 14px;height:44px;border-radius:6px;background:#fff;color:#1d2327;font-weight:700;letter-spacing:.08em;display:flex;align-items:center;justify-content:center}
 .amx-sc .sc-login{padding:22px 26px}
 .amx-sc .sc-lg2{margin:0 auto 18px;width:150px;height:40px;border-radius:6px;background:#1d2327;color:#fff;font-weight:700;letter-spacing:.08em;display:flex;align-items:center;justify-content:center}
 .amx-sc .sc-form{background:#fff;border:1px solid #c3c4c7;padding:20px 22px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
@@ -621,14 +676,20 @@ CSS;
     $main = MK_AME_Design::colors()['main'];
     $base = admin_url('admin.php?page=' . MK_Admin_Menu::SLUG);
     $groups = [
-      ['Visual', [
-        ['colors', 'colors', 'Colors', 'One main color for your whole admin.'],
-        ['logos', 'logos', 'Logos', 'Menu logo and login logo.'],
-        ['footer', 'footer', 'Admin footer', 'Your own text at the bottom of the admin.'],
+      ['Left menu', [
+        ['left', 'left', 'Left menu items', 'Order, names and visibility of the left menu.'],
+        ['spacing', 'spacing', 'Left menu spacing', 'More room in the left menu.'],
+        ['menulogo', 'menulogo', 'Left menu logo', 'Your logo at the top of the left menu.'],
       ]],
-      ['Navigation', [
-        ['left', 'left', 'Left Menu Editor', 'Order, names and visibility of the left menu.'],
-        ['top', 'top', 'Top Menu Editor', 'Clean up the admin bar and add your own links.'],
+      ['Top bar', [
+        ['top', 'top', 'Top bar in the admin', 'Clean up the admin bar and add your own links.'],
+        ['topfront', 'topfront', 'Top bar on the frontend', 'The same for the bar on your website.'],
+      ]],
+      ['Look', [
+        ['colors', 'colors', 'Colors', 'One main color for your whole admin.'],
+        ['fonts', 'fonts', 'Admin fonts', 'Your own font in the whole admin.'],
+        ['loginlogo', 'loginlogo', 'Login logo', 'Your logo on the login page.'],
+        ['footer', 'footer', 'Admin footer', 'Your own text at the bottom of the admin.'],
       ]],
       ['Admin screens', [
         ['dash', 'dash', 'Dashboard', 'Hide dashboard widgets and the welcome panel.'],
@@ -734,7 +795,7 @@ CSS;
   private static function tab_io() {
     $exp = wp_nonce_url(admin_url('admin-post.php?action=mk_ame_export'), 'mk_ame_export');
     $h = self::head('Export / import', 'Copy the settings of Adminino to another website.');
-    if (isset($_GET['imported'])) { $h .= '<div class="notice notice-success inline"><p>' . esc_html(sprintf(self::t('Imported %d groups of settings.'), isset($_GET['n']) ? (int) $_GET['n'] : 0)) . '</p></div>'; }
+    if (isset($_GET['imported'])) { $h .= MK_Admin_Menu::toast(sprintf(self::t('Imported %d groups of settings.'), isset($_GET['n']) ? (int) $_GET['n'] : 0)); }
     if (isset($_GET['import_error'])) { $h .= '<div class="notice notice-error inline"><p>' . esc_html(self::t('That file could not be imported.')) . '</p></div>'; }
     $h .= '<p style="max-width:640px;margin:0">' . esc_html(self::t('Export saves everything you set up in Adminino (menus, colors, post ordering, footer, dashboard and more) in one small file. Import that file on another website that has Adminino, and it gets the same setup. Only Adminino settings are included, not your posts, pages or other plugins.')) . '</p>';
     $h .= '<div class="amx-io"><div class="amx-io-c"><h3>' . esc_html(self::t('Export')) . '</h3><p>' . esc_html(self::t('Download your Adminino settings as a file.')) . '</p><div><a class="button button-primary" href="' . esc_url($exp) . '">' . esc_html(self::t('Export settings')) . '</a></div></div>';

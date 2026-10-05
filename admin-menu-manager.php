@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Adminino
  * Description: Controls the WordPress admin: order, names and visibility of the left menu and the admin bar, a custom color scheme, your logos in the menu and on the login page, and drag and drop post ordering. Settings under Settings > Adminino.
- * Version: 1.2.2
+ * Version: 1.3.0
  * Author: Rino de Boer
  * Requires PHP: 7.4
  * Update URI: https://github.com/rinothecoder/wp-admin-manager
@@ -21,10 +21,14 @@ final class MK_Admin_Menu {
   const BAR = 'mk_ame_bar_settings';
   const SEEN = 'mk_ame_bar_seen';
   const CUS = 'mk_ame_bar_custom';
+  const BARF = 'mk_ame_bar_settings_front';
+  const SPLIT = 'mk_ame_bar_split';
+  const ICONS = 'mk_ame_no_icons';
   const SLUG = 'mk-admin-menu';
   const SCOPES = 'mk_ame_menu_scopes';
   private static $orig = null;
-  private static $gb = []; private static $sim = false; private static $ctxk = false;
+  private static $gb = []; private static $sim = false;
+  private static $barctx = 'admin'; private static $barico = false;
 
   // Language: Dutch when the WordPress locale is Dutch, otherwise English. Filter mk_ame_locale to override.
   public static function lang() {
@@ -44,11 +48,13 @@ final class MK_Admin_Menu {
   public static function tr_html($s) { return self::t_html($s); }
 
   public static function init() {
+    add_action('init', [__CLASS__, 'bar_split'], 1);
     add_action('admin_menu', [__CLASS__, 'add_page']);
     add_action('admin_menu', [__CLASS__, 'capture'], 9998);
     add_action('admin_menu', [__CLASS__, 'apply'], 9999);
     add_filter('custom_menu_order', [__CLASS__, 'use_order']);
     add_filter('menu_order', [__CLASS__, 'order']);
+    add_filter('add_menu_classes', [__CLASS__, 'sep_back'], 99);
     add_action('admin_head', [__CLASS__, 'css']);
     add_action('wp_before_admin_bar_render', [__CLASS__, 'bar_seen'], 9998);
     add_action('wp_before_admin_bar_render', [__CLASS__, 'bar_apply'], 9999);
@@ -185,7 +191,7 @@ final class MK_Admin_Menu {
       }
     }
     $chip = $def ? self::t('Default') : ($own ? self::t('Own settings') : self::t('Inherited'));
-    $h = '<h2 class=~amx-t~>' . esc_html(self::t('Left Menu Editor')) . '</h2><p class=~amx-lead~>' . esc_html(self::t('Drag to reorder, rename or hide items. Set it per role or per user: the menu of a user goes before the menu of their role, and that goes before the default. Hidden items can still be reached through their URL.')) . '</p>';
+    $h = '<h2 class=~amx-t~>' . esc_html(self::t('Left menu items')) . '</h2><p class=~amx-lead~>' . esc_html(self::t('Drag to reorder, rename or hide items. Set it per role or per user: the menu of a user goes before the menu of their role, and that goes before the default. Hidden items can still be reached through their URL.')) . '</p>';
     $hid = '<input type=~hidden~ name=~role~ value=~' . esc_attr($sc['role']) . '~><input type=~hidden~ name=~user~ value=~' . (int) $sc['user'] . '~>';
     $form = function ($op, $inner) use ($hid) {
       return '<form method=~post~ action=~' . esc_url(admin_url('admin-post.php')) . '~ class=~amx-inl~><input type=~hidden~ name=~action~ value=~mk_ame_scope~><input type=~hidden~ name=~op~ value=~' . $op . '~>' . wp_nonce_field('mk_ame_scope', '_wpnonce', false, false) . $hid . $inner . '</form>';
@@ -216,7 +222,7 @@ final class MK_Admin_Menu {
     }
     $h .= '<div class=~amx-scope~><label>' . esc_html(self::t('Role')) . '<select onchange=~window.amxGo?amxGo(this.value):location.href=this.value~>' . $ro . '</select></label>';
     $h .= '<label>' . esc_html(self::t('User')) . '<select onchange=~window.amxGo?amxGo(this.value):location.href=this.value~' . ($sc['role'] === 'all' ? ' disabled' : '') . '>' . $uo . '</select></label><span class=~amx-act~>' . $act . $copy . '</span></div>';
-    $h .= '<p class=~amx-state~><span class=~amx-chip' . (($own && !$def) ? ' own' : '') . '~>' . esc_html($chip) . '</span>' . esc_html($state) . '</p>';
+    if (!$def) { $h .= '<p class=~amx-state~><span class=~amx-chip' . (($own && !$def) ? ' own' : '') . '~>' . esc_html($chip) . '</span>' . esc_html($state) . '</p>'; } else { $h .= '<div style=~height:18px~></div>'; }
     return $h;
   }
   private static function scope_css() {
@@ -232,10 +238,10 @@ final class MK_Admin_Menu {
   private static function scope_preview($sc) {
     $title = sprintf(self::t('How %s sees it'), self::scope_label($sc));
     $tpl = wp_json_encode(self::t('%1$d of %2$d items hidden.'));
-    $js = '<script>(function(){var ul=document.querySelector(~.amx-sg .ame-list~);var box=document.getElementById(~amx-pvl~),note=document.getElementById(~amx-pvn~);if(!ul||!box)return;var tpl=' . $tpl . ';'
+    $js = '<script>(function(){var ul=document.querySelector(~.amx-sg .ame-list~);var box=document.getElementById(~amx-pvl~),note=document.getElementById(~amx-pvn~);if(!ul||!box)return;var tpl=' . $tpl . ';var ni={checked:' . (!empty(get_option(self::ICONS, [])['off']) ? 'true' : 'false') . '};'
       . 'function nm(li){var hd=li.querySelector(~:scope > .ame-head~);if(!hd)return null;var ti=hd.querySelector(~.ame-title~);return {hd:hd,n:ti?(ti.value||ti.getAttribute(~placeholder~)||~~):~~};}'
-      . 'function run(){var vis=[],total=0;ul.querySelectorAll(~:scope > li~).forEach(function(li){if(li.classList.contains(~ame-sep~)){var sc=li.querySelector(~input[type=checkbox]~);if(!(sc&&sc.checked))vis.push(null);return;}var o=nm(li);if(!o)return;total++;var cb=o.hd.querySelector(~.ame-hide input~);if(cb&&cb.checked)return;if(!o.n)return;vis.push(o.n);var sub=li.querySelector(~:scope > ul.ame-sub~);if(sub&&sub.offsetParent!==null){sub.querySelectorAll(~:scope > li:not(.ame-sep)~).forEach(function(sl){var so=nm(sl);if(!so||!so.n)return;var sb=so.hd.querySelector(~.ame-hide input~);if(sb&&sb.checked)return;vis.push({s:so.n});});}});'
-      . 'box.innerHTML=~~;var first=true,last=null,shown=0;vis.forEach(function(n){if(n===null){if(first||last===null)return;var sp=document.createElement(~div~);sp.className=~sep~;box.appendChild(sp);last=null;return;}if(typeof n===~object~){var sd=document.createElement(~div~);sd.className=~sub~;sd.appendChild(document.createTextNode(n.s));box.appendChild(sd);return;}var d=document.createElement(~div~);if(first){d.className=~cur~;first=false;}var ic=document.createElement(~i~);d.appendChild(ic);d.appendChild(document.createTextNode(n));box.appendChild(d);last=n;shown++;});if(box.lastChild&&box.lastChild.className===~sep~)box.removeChild(box.lastChild);note.textContent=tpl.replace(~%1$d~,total-shown).replace(~%2$d~,total);}'
+      . 'function run(){var vis=[],total=0;ul.querySelectorAll(~:scope > li~).forEach(function(li){if(li.classList.contains(~ame-sep~)){var sc=li.querySelector(~input[type=checkbox]~);if(!(sc&&sc.checked))vis.push(null);return;}var o=nm(li);if(!o)return;total++;var cb=o.hd.querySelector(~.ame-hide input~);if(cb&&cb.checked)return;if(!o.n)return;var ib=o.hd.querySelector(~.ame-ico~);vis.push({t:o.n,ic:ib?ib.innerHTML:~~});var sub=li.querySelector(~:scope > ul.ame-sub~);if(sub&&sub.offsetParent!==null){sub.querySelectorAll(~:scope > li:not(.ame-sep)~).forEach(function(sl){var so=nm(sl);if(!so||!so.n)return;var sb=so.hd.querySelector(~.ame-hide input~);if(sb&&sb.checked)return;vis.push({s:so.n});});}});'
+      . 'box.innerHTML=~~;var first=true,last=null,shown=0;vis.forEach(function(n){if(n===null){if(first)return;var sp=document.createElement(~div~);sp.className=~sep~;box.appendChild(sp);last=null;return;}if(n.s!==undefined){var sd=document.createElement(~div~);sd.className=~sub~;sd.appendChild(document.createTextNode(n.s));box.appendChild(sd);return;}var d=document.createElement(~div~);if(first){d.className=~cur~;first=false;}if(!(ni&&ni.checked)){if(n.ic){var bi=document.createElement(~b~);bi.className=~ic~;bi.innerHTML=n.ic;d.appendChild(bi);}else{var ic=document.createElement(~i~);d.appendChild(ic);}}d.appendChild(document.createTextNode(n.t));box.appendChild(d);last=n;shown++;});if(box.lastChild&&box.lastChild.className===~sep~)box.removeChild(box.lastChild);note.textContent=tpl.replace(~%1$d~,total-shown).replace(~%2$d~,total);}'
       . 'run();ul.addEventListener(~input~,run);ul.addEventListener(~change~,run);ul.addEventListener(~click~,function(){setTimeout(run,30);});if(window.jQuery){jQuery(ul).on(~sortupdate sortstop sortreceive~,function(){setTimeout(run,0);});}})();</script>';
     return '<div class=~amx-pv~><h3>' . esc_html($title) . '</h3><div class=~amx-pvs~ id=~amx-pvl~></div><p id=~amx-pvn~></p></div>' . $js;
   }
@@ -299,8 +305,13 @@ final class MK_Admin_Menu {
   private static function cols($top) {
     return '';
   }
+  // Adminino's own menu icon. A grey SVG as base64, so WordPress colors it like the other menu icons.
+  private static function menu_icon() {
+    $f = __DIR__ . '/assets/adminino-sidebar.svg';
+    return is_readable($f) ? 'data:image/svg+xml;base64,' . base64_encode((string) file_get_contents($f)) : 'dashicons-align-right';
+  }
   public static function add_page() {
-    add_menu_page(self::t('Adminino'), self::t('Adminino'), 'manage_options', self::SLUG, [__CLASS__, 'page'], 'dashicons-align-right', 81);
+    add_menu_page(self::t('Adminino'), self::t('Adminino'), 'manage_options', self::SLUG, [__CLASS__, 'page'], self::menu_icon(), 81);
     if (isset($GLOBALS['pagenow']) && $GLOBALS['pagenow'] === 'options-general.php' && isset($_GET['page']) && $_GET['page'] === self::SLUG) { wp_safe_redirect(add_query_arg($_GET, admin_url('admin.php'))); exit; }
   }
   public static function capture() {
@@ -314,7 +325,11 @@ final class MK_Admin_Menu {
     $s = self::settings();
     if (!$s) { return; }
     $map = [];
-    foreach ((array) (isset($s['top']) ? $s['top'] : []) as $t) { $map[$t['slug']] = $t; }
+    foreach ((array) (isset($s['top']) ? $s['top'] : []) as $t) {
+      $map[$t['slug']] = $t;
+      // Separators added with Duplicate.
+      if (strpos($t['slug'], 'separator-mk-') === 0) { $menu[] = ['', 'read', $t['slug'], '', 'wp-menu-separator']; }
+    }
     foreach ($menu as $k => $item) {
       $slug = $item[2];
       if (!isset($map[$slug])) { continue; }
@@ -347,6 +362,30 @@ final class MK_Admin_Menu {
       $submenu[$parent] = $new;
     }
   }
+  // WordPress removes a separator that sits right below another one. A duplicated separator is meant to give
+  // extra space, so put those back in the place the editor shows them.
+  public static function sep_back($menu) {
+    $s = self::settings();
+    if (empty($s['top']) || !is_array($menu)) { return $menu; }
+    $slugs = []; $hid = [];
+    foreach ($s['top'] as $t) { $slugs[] = $t['slug']; if (!empty($t['hidden'])) { $hid[$t['slug']] = 1; } }
+    $present = [];
+    foreach ($menu as $it) { if (isset($it[2])) { $present[$it[2]] = 1; } }
+    $out = [];
+    foreach ($menu as $it) {
+      $out[] = $it;
+      if (strpos((string) (isset($it[4]) ? $it[4] : ''), 'wp-menu-separator') === false) { continue; }
+      $i = array_search($it[2], $slugs, true);
+      if ($i === false) { continue; }
+      for ($j = $i + 1; $j < count($slugs); $j++) {
+        $sl = $slugs[$j];
+        if (strpos($sl, 'separator') !== 0 || isset($present[$sl])) { break; }
+        if (empty($hid[$sl])) { $out[] = ['', 'read', $sl, '', 'wp-menu-separator']; }
+        $present[$sl] = 1;
+      }
+    }
+    return $out;
+  }
   public static function use_order($b) {
     $s = self::settings();
     return empty($s['top']) ? $b : true;
@@ -360,7 +399,50 @@ final class MK_Admin_Menu {
     return $res;
   }
   public static function css() {
-    if (self::settings()) { echo '<style>#adminmenu .mk-ame-hidden{display:none!important}</style>'; }
+    $o = '';
+    if (self::settings()) { $o .= '#adminmenu .mk-ame-hidden{display:none!important}'; }
+    // Icons off: only where the menu shows names. In the collapsed menu and on tablet widths the icons stay, or the items could not be told apart.
+    $ic = get_option(self::ICONS, []);
+    if (!empty($ic['off'])) { $o .= '@media(min-width:961px){body:not(.folded) #adminmenu .wp-menu-image{display:none!important}body:not(.folded) #adminmenu div.wp-menu-name{padding-left:12px!important}}@media(max-width:782px){#adminmenu .wp-menu-image{display:none!important}#adminmenu div.wp-menu-name{padding-left:12px!important}}'; }
+    if ($o !== '') { echo '<style>' . $o . '</style>'; }
+  }
+
+  // One time: the top bar used to be one list for admin and website. Now each has its own list, and items that were in both come back in both.
+  public static function bar_split() {
+    if (get_option(self::SPLIT)) { return; }
+    $bar = get_option(self::BAR, []);
+    $bar = is_array($bar) ? $bar : [];
+    $la = (isset($bar['lists']) && is_array($bar['lists'])) ? $bar['lists'] : [];
+    $lf = $la;
+    $swap = function (&$lists, $from, $to) {
+      foreach ($lists as $p => $rows) {
+        $keep = [];
+        foreach ($rows as $r) {
+          if (isset($r['slug']) && $r['slug'] === $from) { if ($to === null) { continue; } $r['slug'] = $to; }
+          $keep[] = $r;
+        }
+        $lists[$p] = $keep;
+      }
+    };
+    $new = [];
+    foreach (self::custom_links() as $c) {
+      $w = isset($c['where']) ? $c['where'] : 'both';
+      if ($w === 'admin') { $new[] = $c; $swap($lf, $c['id'], null); }
+      elseif ($w === 'front') { $new[] = $c; $swap($la, $c['id'], null); }
+      else {
+        $a = $c; $a['where'] = 'admin';
+        $f = $c; $f['where'] = 'front'; $f['id'] = 'mk-ame-link-f' . substr(md5($c['id']), 0, 6);
+        $new[] = $a; $new[] = $f;
+        $swap($lf, $c['id'], $f['id']);
+      }
+    }
+    if ($la || $lf) {
+      $bar['lists'] = $la;
+      update_option(self::BAR, $bar);
+      update_option(self::BARF, ['lists' => $lf]);
+    }
+    if ($new) { update_option(self::CUS, $new); }
+    update_option(self::SPLIT, 1, false);
   }
   public static function assets($hook) {
     if ($hook === 'toplevel_page_' . self::SLUG) { wp_enqueue_script('jquery-ui-sortable'); }
@@ -373,14 +455,18 @@ final class MK_Admin_Menu {
     $seen = get_option(self::SEEN, []);
     if (!is_array($seen)) { $seen = []; }
     $changed = false;
+    $pos = 0;
     foreach ((array) $wp_admin_bar->get_nodes() as $id => $n) {
+      $pos++;
       $p = (string) $n->parent;
       if (!empty($n->group)) { $row = ['t' => '', 'p' => $p, 'g' => 1]; } else { $lb = self::bar_label($id, $n->title); $row = ['t' => $lb[0], 'p' => $p]; if ($lb[1]) { $row['i'] = 1; } }
       // Remember where the item was seen: a = admin, f = website (frontend).
       $ctx = is_admin() ? 'a' : 'f';
-      if (isset($seen[$id])) { foreach (['a', 'f'] as $c) { if (!empty($seen[$id][$c])) { $row[$c] = 1; } } }
+      if (isset($seen[$id])) { foreach (['a', 'f', 'oa', 'of'] as $c) { if (!empty($seen[$id][$c])) { $row[$c] = $seen[$id][$c]; } } }
       $row[$ctx] = 1;
-      if (!isset($seen[$id]) || empty($seen[$id][$ctx]) || $seen[$id]['p'] !== $p || (isset($seen[$id]['g']) !== isset($row['g'])) || $seen[$id]['t'] !== $row['t'] || (isset($seen[$id]['i']) !== isset($row['i']))) { $seen[$id] = $row; $changed = true; }
+      // Remember the natural order per bar, so the editor lists new items in the same order as the real bar.
+      $row['o' . $ctx] = $pos;
+      if (!isset($seen[$id]) || empty($seen[$id][$ctx]) || !isset($seen[$id]['o' . $ctx]) || (int) $seen[$id]['o' . $ctx] !== $pos || $seen[$id]['p'] !== $p || (isset($seen[$id]['g']) !== isset($row['g'])) || $seen[$id]['t'] !== $row['t'] || (isset($seen[$id]['i']) !== isset($row['i']))) { $seen[$id] = $row; $changed = true; }
     }
     if ($changed) { update_option(self::SEEN, $seen, false); }
   }
@@ -405,7 +491,7 @@ final class MK_Admin_Menu {
       $wp_admin_bar->remove_node($gid);
       $merged[$gid] = $p;
     }
-    $s = get_option(self::BAR, []);
+    $s = get_option(is_admin() ? self::BAR : self::BARF, []);
     if (empty($s['lists'])) { return; }
     $lists = $s['lists'];
     foreach ($merged as $gid => $p) {
@@ -421,6 +507,17 @@ final class MK_Admin_Menu {
         if ($r['title'] !== '') { $wp_admin_bar->add_node(['id' => $id, 'title' => self::bar_retitle($nodes[$id]->title, $r['title'])]); }
         $order[] = $id;
       }
+      // Items that are not in the saved list yet (new plugin items, or items that only show up on the website)
+      // come after the saved ones, just like the editor shows them. Without this they would stay in front.
+      $rest = [];
+      foreach ($nodes as $nid => $nn) {
+        if ((string) $nn->parent !== (string) $parent || !empty($nn->group) || in_array($nid, $order, true)) { continue; }
+        $listed = false;
+        foreach ($rows as $r) { if ($r['slug'] === $nid) { $listed = true; break; } }
+        if (!$listed) { $rest[] = $nid; }
+      }
+      if ($parent === 'top-secondary') { $rest = array_reverse($rest); }
+      $order = array_merge($order, $rest);
       if ($parent === 'top-secondary') { $order = array_reverse($order); }
       if (count($order) > 1) {
         foreach ($order as $id) {
@@ -459,6 +556,8 @@ final class MK_Admin_Menu {
     }
     $sc = self::scope_req();
     if (!self::scope_default($sc) && self::scope_own($sc) === null) { self::scope_back($sc, 'saved'); }
+    // Icon choices from the picker hold for every role and user.
+    if (isset($_POST['icon']) && is_array($_POST['icon'])) { MK_AME_Look::save_map(wp_unslash($_POST['icon'])); }
     self::scope_set($sc, $out);
     self::scope_back($sc, 'saved');
   }
@@ -472,11 +571,15 @@ final class MK_Admin_Menu {
   public static function save_bar() {
     if (!current_user_can('manage_options')) { wp_die(self::t('Access denied.')); }
     check_admin_referer('mk_ame_save_bar');
+    if (isset($_POST['baricon']) && is_array($_POST['baricon'])) { MK_AME_Look::save_map(wp_unslash($_POST['baricon']), 'bmap'); }
+    $ctx = (isset($_POST['ctx']) && $_POST['ctx'] === 'front') ? 'front' : 'admin';
     $in = isset($_POST['bar']) ? (array) wp_unslash($_POST['bar']) : [];
     $out = ['lists' => []];
     $old = [];
     foreach (self::custom_links() as $cl) { $old[$cl['id']] = $cl; }
+    // Custom links of the other list stay as they are; the ones of this list are rebuilt from the form.
     $cus = [];
+    foreach (self::custom_links() as $cl) { if ((isset($cl['where']) ? $cl['where'] : 'both') !== $ctx) { $cus[] = $cl; } }
     $seen = get_option(self::SEEN, []);
     foreach ($in as $g) {
       if (!is_array($g) || empty($g['rows']) || !is_array($g['rows'])) { continue; }
@@ -496,23 +599,24 @@ final class MK_Admin_Menu {
           if (!isset($old[$id])) { $id = 'mk-ame-link-' . strtolower(wp_generate_password(6, false)); }
           $eff = $parent; $guard = 0;
           while (isset($seen[$eff]) && !empty($seen[$eff]['g']) && $seen[$eff]['p'] !== '' && $guard++ < 5) { $eff = $seen[$eff]['p']; }
-          $cus[] = ['id' => $id, 'title' => $title, 'url' => esc_url_raw($url), 'parent' => $eff, 'blank' => !empty($old[$id]['blank']) ? 1 : 0, 'where' => (isset($r['where']) && in_array($r['where'], ['admin', 'front'], true)) ? $r['where'] : 'both'];
+          $cus[] = ['id' => $id, 'title' => $title, 'url' => esc_url_raw($url), 'parent' => $eff, 'blank' => !empty($old[$id]['blank']) ? 1 : 0, 'where' => $ctx];
           $out['lists'][$eff][] = ['slug' => $id, 'title' => '', 'hidden' => !empty($r['hidden']) ? 1 : 0];
           continue;
         }
         $out['lists'][$parent][] = ['slug' => $id, 'title' => sanitize_text_field(isset($r['title']) ? $r['title'] : ''), 'hidden' => (!empty($r['hidden']) && !self::locked($id)) ? 1 : 0];
       }
     }
-    update_option(self::BAR, $out);
+    update_option($ctx === 'front' ? self::BARF : self::BAR, $out);
     update_option(self::CUS, $cus);
-    wp_safe_redirect(add_query_arg(['page' => self::SLUG, 'tab' => 'top', 'saved' => 1], admin_url('admin.php')));
+    wp_safe_redirect(add_query_arg(['page' => self::SLUG, 'tab' => $ctx === 'front' ? 'topfront' : 'top', 'saved' => 1], admin_url('admin.php')));
     exit;
   }
     public static function reset_bar() {
     if (!current_user_can('manage_options')) { wp_die(self::t('Access denied.')); }
     check_admin_referer('mk_ame_reset_bar');
-    delete_option(self::BAR);
-    wp_safe_redirect(add_query_arg(['page' => self::SLUG, 'tab' => 'top', 'reset' => 1], admin_url('admin.php')));
+    $ctx = (isset($_POST['ctx']) && $_POST['ctx'] === 'front') ? 'front' : 'admin';
+    delete_option($ctx === 'front' ? self::BARF : self::BAR);
+    wp_safe_redirect(add_query_arg(['page' => self::SLUG, 'tab' => $ctx === 'front' ? 'topfront' : 'top', 'reset' => 1], admin_url('admin.php')));
     exit;
   }
 
@@ -524,7 +628,7 @@ final class MK_Admin_Menu {
   public static function bar_custom($bar) {
     if (!current_user_can('manage_options')) { return; }
     foreach (self::custom_links() as $c) {
-      $w = isset($c['where']) ? $c['where'] : 'front';
+      $w = isset($c['where']) ? $c['where'] : 'both';
       if (!self::$sim && (is_admin() ? $w === 'front' : $w === 'admin')) { continue; }
       $meta = ['class' => 'mk-ame-custom'];
       if (!empty($c['blank'])) { $meta['target'] = '_blank'; }
@@ -549,6 +653,7 @@ final class MK_Admin_Menu {
     $h .= $extra;
     $h .= '<label class=~ame-hide~ title=~' . esc_attr(self::t('Hide')) . '~><input type=~checkbox~ name=~' . $name . '[hidden]~ value=~1~' . ($hidden ? ' checked' : '') . ($locked ? ' disabled' : '') . '>'.self::EYE.'<span class=~screen-reader-text~>' . esc_html(self::t('Hide')) . '</span></label>';
     if (!$sep) { $h .= '<button type=~button~ class=~ame-edit~ title=~' . esc_attr(self::t('Edit')) . '~>' . self::PEN . '</button>'; }
+    else { $h .= '<button type=~button~ class=~ame-sepedit~ title=~' . esc_attr(self::t('Edit')) . '~>' . self::PEN . '</button>'; }
     $h .= '</div>';
     return $h;
   }
@@ -557,20 +662,20 @@ final class MK_Admin_Menu {
     if (!current_user_can('manage_options')) { return; }
     $tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : '';
     if ($tab === '' && !isset($_GET['saved']) && !isset($_GET['reset'])) { $tab = 'overview'; }
-    if (!in_array($tab, array_merge(['top', 'colors', 'logos', 'order'], MK_AME_Extras::TABS), true)) { $tab = 'left'; }
+    if (!in_array($tab, array_merge(['top', 'topfront', 'colors', 'logos', 'menulogo', 'loginlogo', 'order'], MK_AME_Extras::TABS), true)) { $tab = 'left'; }
     $base = admin_url('admin.php?page=' . self::SLUG);
-    $css = '<style>.ame-header{display:flex;align-items:center;justify-content:space-between;gap:16px;background:#fff;border-bottom:1px solid #e0e0e0;padding:18px 28px;margin:-10px -20px 24px -22px}.ame-brand{display:flex;gap:10px;align-items:center;color:#1e1e1e}.ame-brand .dashicons{color:#7c3aed;width:24px;height:24px;font-size:24px}.ame .ame-header h1{font-size:18px;font-weight:600;line-height:1.15;margin:0;padding:0;color:#1e1e1e}.ame-header-note{font-size:12px;color:#666}.ame ul{margin:0;padding:0;list-style:none;max-width:1200px}.ame-row{margin:0 0 6px}.ame-head{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #c3c4c7;border-radius:4px;padding:8px 12px}.ame-grip{cursor:grab;color:#8c8f94;font-size:16px;line-height:1;letter-spacing:-3px;user-select:none}.ame-title{flex:1;min-width:0}.ame-name{flex:1}.ame-muted{color:#8c8f94;font-style:italic}.ame-sep .ame-head{background:#f6f7f7;border-style:dashed}.ame-hide{white-space:nowrap}.ame-sub{margin:6px 0 10px 32px!important}.ame-ph{height:44px;border:1px dashed var(--amx-main,#2271b1);background:var(--amx-tint,#f0f6fc);margin-bottom:6px}.ame-row:has(> .ame-head input[type=checkbox]:checked) > .ame-head{opacity:.55}.ame h2{margin:24px 0 8px}.ame .nav-tab-wrapper{margin-bottom:16px}.ame-url{flex:1 1 auto;min-width:0}.ame-custom .ame-title{flex:0 0 240px}.ame-reset{background:none;border:0;color:var(--amx-main,#2271b1);cursor:pointer;text-decoration:underline;padding:0 4px;font-size:13px}.ame-hide{min-width:100px}.ame-remove{background:none;border:0;color:#b32d2e;cursor:pointer;text-decoration:underline;padding:0 4px;font-size:13px}.ame-remove:hover{color:#8a1f1f}.ame-custom > .ame-head{border-left:3px solid var(--amx-main,#2271b1)}.ame-title::placeholder{color:#8c8f94;font-style:italic;opacity:1}.ame-icon-note{color:#8c8f94;font-size:12px;font-style:italic;white-space:nowrap}.ame-where{font-size:11px;font-weight:600;line-height:1;padding:4px 8px;border-radius:10px;white-space:nowrap}.ame-where-a{background:#f0f0f1;color:#50575e}.ame-where-f{background:#e6f4ea;color:#1e6b34}.ame .ame-head,.ame-cols{display:grid;grid-template-columns:20px 36px minmax(160px,1fr) 170px 110px 64px;grid-template-areas:~grip tog name note where hide~;column-gap:12px;align-items:center}.ame-tab-left .ame-head,.ame-tab-left .ame-cols{grid-template-columns:20px 36px minmax(160px,1fr) 170px 64px;grid-template-areas:~grip tog name note hide~}.ame-head>.ame-grip{grid-area:grip}.ame-head>.ame-toggle,.ame-head>.ame-remove{grid-area:tog;justify-self:start}.ame-head>.ame-title,.ame-head>.ame-name{grid-area:name;width:100%;min-width:0}.ame-head>.ame-reset,.ame-head>.ame-icon-note{grid-area:note;justify-self:start}.ame-head>.ame-url{grid-area:note;width:100%;min-width:0}.ame-head>.ame-where{grid-area:where;justify-self:start}.ame-head>.ame-hide{grid-area:hide;justify-self:center;min-width:0;font-size:0}.ame-cols{max-width:1200px;box-sizing:border-box;padding:0 13px;margin:0 0 6px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:#646970}.ame-cols>span:last-child{justify-self:center}.ame-toggle{display:inline-flex;align-items:center;gap:1px;background:none;border:0;padding:2px;cursor:pointer;color:var(--amx-main,#2271b1);border-radius:3px}.ame-toggle:hover{background:var(--amx-tint,#f0f6fc)}.ame-toggle .dashicons{font-size:16px;width:16px;height:16px;transition:transform .15s}.ame-toggle.is-open .dashicons{transform:rotate(90deg)}.ame-count{font-size:11px;color:#646970}.ame-head>.ame-remove{padding:2px;text-decoration:none}.ame-remove .dashicons{font-size:16px;width:16px;height:16px}.ame-lang-nl .ame-head,.ame-lang-nl .ame-cols{grid-template-columns:20px 36px minmax(160px,1fr) 170px 110px 72px}.ame-lang-nl.ame-tab-left .ame-head,.ame-lang-nl.ame-tab-left .ame-cols{grid-template-columns:20px 36px minmax(160px,1fr) 170px 72px}@media(max-width:960px){.ame .ame-head{display:flex;flex-wrap:wrap}.ame-head>.ame-title{flex:1 1 200px}.ame-head>.ame-hide{font-size:13px}.ame-cols{display:none}}.ame-hide{position:relative;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;min-width:0;border-radius:6px;cursor:pointer;color:#8c8f94}.ame-hide:hover{background:#f0f0f1;color:#1d2327}.ame-hide input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}.ame-hide input{appearance:none!important;-webkit-appearance:none!important;background:none!important;border:0!important;box-shadow:none!important;outline:0!important;opacity:0!important;position:absolute!important;inset:0;width:100%!important;height:100%!important;min-width:0!important;margin:0!important}.ame-hide input:before{display:none!important;content:none!important}.ame-eye{display:flex;pointer-events:none}.ame-eye svg{width:20px;height:20px}.ame-eye .off{display:none}.ame-hide input:checked + .ame-eye .on{display:none}.ame-hide input:checked + .ame-eye .off{display:block}.ame-hide input:disabled{cursor:default}.ame-hide:has(input:disabled){opacity:.5;cursor:default}.ame-hide:has(input:disabled):hover{background:none}.ame .ame-row > .ame-head{display:flex;flex-wrap:nowrap;align-items:center;gap:10px}.ame .ame-row > .ame-head > *{order:5}.ame .ame-row > .ame-head > .ame-grip{order:0}.ame .ame-row > .ame-head > .ame-toggle{order:1}.ame .ame-row > .ame-head > .ame-title,.ame .ame-row > .ame-head > .ame-name{order:2}.ame .ame-row > .ame-head > .ame-reset{order:3}.ame .ame-row > .ame-head > .ame-icon-note{order:4}.ame .ame-row > .ame-head > .ame-url{order:5}.ame .ame-row > .ame-head > .ame-where{order:6}.ame .ame-row > .ame-head > .ame-hide{order:8;margin-left:auto}.ame .ame-row > .ame-head > .ame-remove{order:7}.ame .ame-row > .ame-head > .ame-edit{order:9}.ame .ame-row > .ame-head > .ame-wsel{order:6;display:none;flex:none;min-height:30px}.ame .ame-row.is-edit > .ame-head > .ame-wsel{display:inline-block}.ame .ame-row.is-edit.ame-custom > .ame-head > .ame-where{display:none}.ame-edit .ck{display:none}.ame .ame-row.is-edit > .ame-head > .ame-edit .ck{display:block}.ame .ame-row.is-edit > .ame-head > .ame-edit .pen{display:none}.ame .ame-row.is-edit > .ame-head > .ame-edit{color:var(--amx-main,#2271b1)}.ame-addp{margin:8px 0 24px}.ame .ame-row > .ame-head > .ame-wsel{width:135px;max-width:135px;flex:none}.ame .ame-row > .ame-head > .ame-hide,.ame .ame-row > .ame-head > .ame-edit,.ame .ame-row > .ame-head > .ame-remove,.ame .ame-row > .ame-head > .ame-grip,.ame .ame-row > .ame-head > .ame-toggle,.ame .ame-row > .ame-head > .ame-where{flex:none}.ame .ame-row > .ame-head > .ame-title{flex:0 1 auto;width:auto}.ame .ame-row > .ame-head > .ame-url{flex:1 1 0;width:auto;min-width:0}.ame-icon-note:empty{display:none}.ame .ame-row:not(.is-edit) > .ame-head > .ame-title,.ame .ame-row:not(.is-edit) > .ame-head > .ame-url{border-color:transparent!important;background:transparent!important;box-shadow:none!important;pointer-events:none;padding-left:0;padding-right:0;field-sizing:content;min-width:40px;max-width:360px}.ame .ame-row:not(.is-edit) > .ame-head > .ame-title{color:#1d2327;font-weight:500}.ame .ame-row:not(.is-edit) > .ame-head > .ame-title::placeholder{color:#1d2327;font-style:normal;opacity:1}.ame .ame-row:not(.is-edit) > .ame-head > .ame-url{font-size:12px;color:#8c8f94;max-width:none}.ame .ame-row:not(.is-edit) > .ame-head > .ame-url:placeholder-shown{display:none}.ame .ame-row.is-edit > .ame-head > .ame-title{flex:0 1 200px;min-width:110px}.ame .ame-row.is-edit:not(.ame-custom) > .ame-head > .ame-title{flex:1 1 auto;max-width:420px}.ame .ame-row.is-edit > .ame-head > .ame-url{flex:1 1 200px;min-width:130px}.ame-edit,.ame-remove{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;margin:0;border:0;border-radius:6px;background:none;cursor:pointer;color:#8c8f94;text-decoration:none}.ame-edit:hover{background:#f0f0f1;color:#1d2327}.ame-remove{color:#b32d2e}.ame-remove:hover{background:#fcf0f1;color:#8a1f1f}.ame-edit svg,.ame-remove svg{width:18px;height:18px;pointer-events:none}.ame .ame-row > .ame-head > .ame-edit{visibility:hidden}.ame .ame-row > .ame-head:hover > .ame-edit,.ame .ame-row.is-edit > .ame-head > .ame-edit{visibility:visible}.ame .ame-row > .ame-head > .ame-remove{display:none}.ame .ame-row.is-edit > .ame-head > .ame-remove{display:inline-flex}@media(hover:none){.ame .ame-row > .ame-head > .ame-edit{visibility:visible}}</style>';
-    $js = '<script>jQuery(function($){$(~.ame-list~).sortable({handle:~.ame-grip~,items:~>li~,connectWith:($(~.ame-add~).length?~.ame-list~:false),placeholder:~ame-ph~,receive:function(e,ui){if(!ui.item.hasClass(~ame-custom~)){ui.sender.sortable(~cancel~)}}});$(~.ame-toggle~).on(~click~,function(){var o=$(this).toggleClass(~is-open~).hasClass(~is-open~);$(this).attr(~aria-expanded~,o?~true~:~false~).closest(~li~).children(~ul.ame-sub~).toggle(o)});$(document).on(~click~,~.ame-remove~,function(){var li=$(this).closest(~li~);if(li.hasClass(~ame-new~)){li.remove()}else{li.find(~.ame-del~).first().val(1);li.hide()}});function sy(i){var o=i.attr(~data-orig~);i.siblings(~.ame-reset~).toggle(o!==undefined&&i.val()!==o)}$(~.ame-title[data-orig]~).each(function(){sy($(this))}).on(~input~,function(){sy($(this))});$(document).on(~click~,~.ame-reset~,function(){var i=$(this).siblings(~.ame-title~);i.val(i.attr(~data-orig~));sy(i)});$(document).off(~mousedown.amee~,~.ame-edit,.ame-remove~).on(~mousedown.amee~,~.ame-edit,.ame-remove~,function(e){e.preventDefault()});$(document).off(~click.amee~,~.ame-edit~).on(~click.amee~,~.ame-edit~,function(){var li=$(this).closest(~li~),hd=li.children(~.ame-head~);function snap(){return hd.find(~.ame-title,.ame-url,.ame-wsel~).map(function(){return this.value}).get().join(~|~)}if(!li.hasClass(~is-edit~)){li.addClass(~is-edit~).data(~snap~,snap());hd.find(~.ame-title~).focus();return}if(document.activeElement){document.activeElement.blur()}var isnew=li.hasClass(~ame-new~);if(isnew&&!hd.find(~.ame-title~).val()&&!hd.find(~.ame-url~).val()){li.remove();return}if(isnew||li.data(~snap~)!==snap()){var f=li.closest(~form~)[0];if(f){if(f.requestSubmit){f.requestSubmit()}else{$(f).trigger(~submit~)}return}}li.removeClass(~is-edit~)});$(document).off(~focusin.amee~,~.ame-head .ame-title,.ame-head .ame-url~).on(~focusin.amee~,~.ame-head .ame-title,.ame-head .ame-url~,function(){$(this).closest(~li~).addClass(~is-edit~)});$(document).off(~focusout.amee~,~.ame-head~).on(~focusout.amee~,~.ame-head~,function(){var h=this,li=$(h).closest(~li~);setTimeout(function(){if(!h.contains(document.activeElement)&&!li.hasClass(~ame-new~)){li.removeClass(~is-edit~)}},0)});$(document).off(~keydown.amee~,~.ame-head .ame-title,.ame-head .ame-url~).on(~keydown.amee~,~.ame-head .ame-title,.ame-head .ame-url~,function(e){if(e.which===13){e.preventDefault();$(this).blur()}});var n=0;$(~.ame-add~).on(~click~,function(){var ul=$(this).closest(~p~).prevAll(~ul.ame-list~).first();n++;var p=~bar[0][rows][~+(900+n)+~]~;var h=$(~<div>~).addClass(~ame-head~);h.append($(~<span>~).addClass(~ame-grip~).html(~&#8942;&#8942;~));h.append($(~<input>~).attr({type:~hidden~,name:p+~[slug]~,value:~new~}));h.append($(~<input>~).attr({type:~hidden~,name:p+~[pos]~,value:0}).addClass(~pos~));h.append($(~<input>~).attr({type:~text~,name:p+~[title]~,placeholder:~' . esc_js(self::t('Name')) . '~}).addClass(~ame-title~));h.append($(~<input>~).attr({type:~text~,name:p+~[url]~,list:~ame-urls~,placeholder:~' . esc_js(self::t('URL or admin page')) . '~}).addClass(~ame-url~));h.append($(~<input>~).attr({type:~hidden~,name:p+~[custom]~,value:1}));h.append($(~<select>~).attr({name:p+~[where]~}).addClass(~ame-wsel~).html(~<option value=both>' . esc_js(self::t('Admin and frontend')) . '</option><option value=admin>' . esc_js(self::t('Admin only')) . '</option><option value=front>' . esc_js(self::t('Frontend only')) . '</option>~));h.append($(~<button>~).attr({type:~button~,title:~' . esc_js(__('Delete')) . '~}).addClass(~ame-remove~).html(' . wp_json_encode(self::TRASH) . '));h.append($(~<label>~).addClass(~ame-hide~).append($(~<input>~).attr({type:~checkbox~,name:p+~[hidden]~,value:1})).append($(~<span>~).addClass(~ame-eye~).html(' . wp_json_encode(self::EYE_INNER) . ')));h.append($(~<button>~).attr({type:~button~,title:~' . esc_js(self::t('Edit')) . '~}).addClass(~ame-edit~).html(' . wp_json_encode(self::PEN) . '));var li=$(~<li>~).addClass(~ame-row ame-custom ame-new is-edit~).append(h);ul.append(li);$(~.ame-list~).sortable(~refresh~);li[0].scrollIntoView({block:~center~});h.find(~.ame-title~).focus()});$(~.ame-form~).on(~submit~,function(){$(~.ame-title[data-orig]~).each(function(){if($(this).val()===$(this).attr(~data-orig~)){$(this).val(~~)}});$(~ul.ame-list~).each(function(){var idx=$(this).data(~idx~);$(this).children(~li~).each(function(i){var hd=$(this).children(~.ame-head~);hd.find(~input~).each(function(){var nm=this.name;if(nm&&nm.indexOf(~bar[~)===0){this.name=~bar[~+idx+~][rows][~+i+~]~+nm.substring(nm.lastIndexOf(~[~))}});hd.find(~.pos~).val(i)})})})});</script>';
-    $h = '<div class=~wrap ame ame-tab-' . $tab . ' ame-lang-' . self::lang() . '~><header class=~ame-header~><span class=~ame-brand~><span class=~dashicons dashicons-align-right~ aria-hidden=~true~></span><h1>' . esc_html(self::t('Adminino')) . '</h1></span><span class=~ame-header-note~>' . esc_html(self::t('By Rino de Boer')) . '</span></header>' . MK_AME_Extras::sidebar($tab, $base) . '';
-    if (isset($_GET['saved'])) { $h .= '<div class=~notice notice-success is-dismissible inline~><p>' . esc_html(self::t('Saved.')) . '</p></div>'; }
-    if (isset($_GET['reset'])) { $h .= '<div class=~notice notice-success is-dismissible inline~><p>' . esc_html(self::t('Reset to the defaults.')) . '</p></div>'; }
-    if ($tab === 'colors' || $tab === 'logos' || $tab === 'order' || in_array($tab, MK_AME_Extras::TABS, true)) {
+    $css = '<style>.ame-header{display:flex;align-items:center;justify-content:space-between;gap:16px;background:#fff;border-bottom:1px solid #e0e0e0;padding:18px 28px;margin:-10px -20px 24px -22px}.ame-brand{display:flex;gap:10px;align-items:center;color:#1e1e1e}.ame-brand .ame-logo{display:block;width:32px;height:32px;margin:-4px 0}.ame .ame-header h1{font-size:18px;font-weight:600;line-height:1.15;margin:0;padding:0;color:#1e1e1e}.ame-header-note{font-size:12px;color:#666}.ame-opt{margin:0 0 16px;max-width:1200px}.ame-opt label{font-weight:600}.ame-opt .description{display:block;margin:4px 0 0 24px}.ame ul{margin:0;padding:0;list-style:none;max-width:1200px}.ame-row{margin:0 0 6px}.ame-head{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #c3c4c7;border-radius:4px;padding:8px 12px}.ame-grip{cursor:grab;color:#8c8f94;font-size:16px;line-height:1;letter-spacing:-3px;user-select:none}.ame-title{flex:1;min-width:0}.ame-name{flex:1}.ame-muted{color:#8c8f94;font-style:italic}.ame-sep .ame-head{background:#f6f7f7;border-style:dashed}.ame-hide{white-space:nowrap}.ame-sub{margin:6px 0 10px 32px!important}.ame-ph{height:44px;border:1px dashed var(--amx-main,#2271b1);background:var(--amx-tint,#f0f6fc);margin-bottom:6px}.ame-row:has(> .ame-head > .ame-hide input:checked) > .ame-head{background:#f6f7f7;border-style:dashed}.ame-row:has(> .ame-head > .ame-hide input:checked) > .ame-head > :not(.ame-hide):not(.ame-edit):not(.ame-sepedit){opacity:.5}.ame h2{margin:24px 0 8px}.ame .nav-tab-wrapper{margin-bottom:16px}.ame-url{flex:1 1 auto;min-width:0}.ame-custom .ame-title{flex:0 0 240px}.ame-reset{background:none;border:0;color:var(--amx-main,#2271b1);cursor:pointer;text-decoration:underline;padding:0 4px;font-size:13px}.ame-hide{min-width:100px}.ame-remove{background:none;border:0;color:#b32d2e;cursor:pointer;text-decoration:underline;padding:0 4px;font-size:13px}.ame-remove:hover{color:#8a1f1f}.ame-custom > .ame-head{border-left:3px solid var(--amx-main,#2271b1)}.ame-title::placeholder{color:#8c8f94;font-style:italic;opacity:1}.ame-icon-note{color:#8c8f94;font-size:12px;font-style:italic;white-space:nowrap}.ame .ame-head,.ame-cols{display:grid;grid-template-columns:20px 36px minmax(160px,1fr) 170px 110px 64px;grid-template-areas:~grip tog name note where hide~;column-gap:12px;align-items:center}.ame-tab-left .ame-head,.ame-tab-left .ame-cols{grid-template-columns:20px 36px minmax(160px,1fr) 170px 64px;grid-template-areas:~grip tog name note hide~}.ame-head>.ame-grip{grid-area:grip}.ame-head>.ame-toggle,.ame-head>.ame-remove{grid-area:tog;justify-self:start}.ame-head>.ame-title,.ame-head>.ame-name{grid-area:name;width:100%;min-width:0}.ame-head>.ame-reset,.ame-head>.ame-icon-note{grid-area:note;justify-self:start}.ame-head>.ame-url{grid-area:note;width:100%;min-width:0}.ame-head>.ame-hide{grid-area:hide;justify-self:center;min-width:0;font-size:0}.ame-cols{max-width:1200px;box-sizing:border-box;padding:0 13px;margin:0 0 6px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;color:#646970}.ame-cols>span:last-child{justify-self:center}.ame-toggle{display:inline-flex;align-items:center;gap:1px;background:none;border:0;padding:2px;cursor:pointer;color:var(--amx-main,#2271b1);border-radius:3px}.ame-toggle:hover{background:var(--amx-tint,#f0f6fc)}.ame-toggle .dashicons{font-size:16px;width:16px;height:16px;transition:transform .15s}.ame-toggle.is-open .dashicons{transform:rotate(90deg)}.ame-count{font-size:11px;color:#646970}.ame-head>.ame-remove{padding:2px;text-decoration:none}.ame-remove .dashicons{font-size:16px;width:16px;height:16px}.ame-lang-nl .ame-head,.ame-lang-nl .ame-cols{grid-template-columns:20px 36px minmax(160px,1fr) 170px 110px 72px}.ame-lang-nl.ame-tab-left .ame-head,.ame-lang-nl.ame-tab-left .ame-cols{grid-template-columns:20px 36px minmax(160px,1fr) 170px 72px}@media(max-width:960px){.ame .ame-head{display:flex;flex-wrap:wrap}.ame-head>.ame-title{flex:1 1 200px}.ame-head>.ame-hide{font-size:13px}.ame-cols{display:none}}.ame-hide{position:relative;display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;min-width:0;border-radius:6px;cursor:pointer;color:#8c8f94}.ame-hide:hover{background:#f0f0f1;color:#1d2327}.ame-hide input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}.ame-hide input{appearance:none!important;-webkit-appearance:none!important;background:none!important;border:0!important;box-shadow:none!important;outline:0!important;opacity:0!important;position:absolute!important;inset:0;width:100%!important;height:100%!important;min-width:0!important;margin:0!important}.ame-hide input:before{display:none!important;content:none!important}.ame-eye{display:flex;pointer-events:none}.ame-eye svg{width:20px;height:20px}.ame-eye .off{display:none}.ame-hide input:checked + .ame-eye .on{display:none}.ame-hide input:checked + .ame-eye .off{display:block}.ame-hide input:disabled{cursor:default}.ame-hide:has(input:disabled){opacity:.5;cursor:default}.ame-hide:has(input:disabled):hover{background:none}.ame .ame-row > .ame-head{display:flex;flex-wrap:nowrap;align-items:center;gap:10px}.ame .ame-row > .ame-head > *{order:5}.ame .ame-row > .ame-head > .ame-grip{order:0}.ame .ame-row > .ame-head > .ame-toggle{order:6;min-width:46px;justify-content:flex-end}.ame .ame-row > .ame-head::after{content:~~;order:5;flex:1 1 0;min-width:0}.ame .ame-row > .ame-head > .ame-title,.ame .ame-row > .ame-head > .ame-name{order:2}.ame .ame-row > .ame-head > .ame-reset{order:3}.ame .ame-row > .ame-head > .ame-icon-note{order:4}.ame .ame-row > .ame-head > .ame-url{order:5}.ame .ame-row > .ame-head > .ame-hide{order:9}.ame .ame-row > .ame-head > .ame-remove{order:7}.ame .ame-row > .ame-head > .ame-edit{order:8}.ame-edit .ck{display:none}.ame .ame-row.is-edit > .ame-head > .ame-edit .ck{display:block}.ame .ame-row.is-edit > .ame-head > .ame-edit .pen{display:none}.ame .ame-row.is-edit > .ame-head > .ame-edit{color:var(--amx-main,#2271b1)}.ame-addp{margin:8px 0 24px}.ame .ame-row > .ame-head > .ame-hide,.ame .ame-row > .ame-head > .ame-edit,.ame .ame-row > .ame-head > .ame-remove,.ame .ame-row > .ame-head > .ame-grip,.ame .ame-row > .ame-head > .ame-toggle{flex:none}.ame .ame-row > .ame-head > .ame-title{flex:0 1 auto;width:auto}.ame .ame-row > .ame-head > .ame-url{flex:1 1 0;width:auto;min-width:0}.ame-icon-note:empty{display:none}.ame .ame-row:not(.is-edit) > .ame-head > .ame-title,.ame .ame-row:not(.is-edit) > .ame-head > .ame-url{border-color:transparent!important;background:transparent!important;box-shadow:none!important;pointer-events:none;padding-left:0;padding-right:0;field-sizing:content;min-width:40px;max-width:360px}.ame .ame-row:not(.is-edit) > .ame-head > .ame-title{color:#1d2327;font-weight:500}.ame .ame-row:not(.is-edit) > .ame-head > .ame-title::placeholder{color:#1d2327;font-style:normal;opacity:1}.ame .ame-row:not(.is-edit) > .ame-head > .ame-url{font-size:12px;color:#8c8f94;max-width:none}.ame .ame-row:not(.is-edit) > .ame-head > .ame-url:placeholder-shown{display:none}.ame .ame-row.is-edit > .ame-head > .ame-title{flex:0 1 200px;min-width:110px}.ame .ame-row.is-edit:not(.ame-custom) > .ame-head > .ame-title{flex:1 1 auto;max-width:420px}.ame .ame-row.is-edit > .ame-head > .ame-url{flex:1 1 200px;min-width:130px}.ame-edit,.ame-remove{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;margin:0;border:0;border-radius:6px;background:none;cursor:pointer;color:#8c8f94;text-decoration:none}.ame-edit:hover{background:#f0f0f1;color:#1d2327}.ame-remove{color:#b32d2e}.ame-remove:hover{background:#fcf0f1;color:#8a1f1f}.ame-edit svg,.ame-remove svg{width:18px;height:18px;pointer-events:none}.ame .ame-row > .ame-head > .ame-edit{visibility:visible}.ame .ame-row > .ame-head:hover > .ame-edit,.ame .ame-row.is-edit > .ame-head > .ame-edit{visibility:visible}.ame .ame-row > .ame-head > .ame-remove{display:none}.ame .ame-row.is-edit > .ame-head > .ame-remove{display:inline-flex}@media(hover:none){.ame .ame-row > .ame-head > .ame-edit{visibility:visible}}</style>';
+    $js = '<script>jQuery(function($){$(~.ame-list~).sortable({handle:~.ame-grip~,items:~>li~,connectWith:($(~.ame-add~).length?~.ame-list~:false),placeholder:~ame-ph~,receive:function(e,ui){if(!ui.item.hasClass(~ame-custom~)){ui.sender.sortable(~cancel~)}}});$(~.ame-toggle~).on(~click~,function(){var o=$(this).toggleClass(~is-open~).hasClass(~is-open~);$(this).attr(~aria-expanded~,o?~true~:~false~).closest(~li~).children(~ul.ame-sub~).toggle(o)});$(document).on(~click~,~.ame-remove~,function(){var li=$(this).closest(~li~);if(li.hasClass(~ame-new~)){li.remove()}else{li.find(~.ame-del~).first().val(1);li.hide()}});function sy(i){var o=i.attr(~data-orig~);i.siblings(~.ame-reset~).toggle(o!==undefined&&i.val()!==o)}$(~.ame-title[data-orig]~).each(function(){sy($(this))}).on(~input~,function(){sy($(this))});$(document).on(~click~,~.ame-reset~,function(){var i=$(this).siblings(~.ame-title~);i.val(i.attr(~data-orig~));sy(i)});$(document).off(~mousedown.amee~,~.ame-edit,.ame-remove~).on(~mousedown.amee~,~.ame-edit,.ame-remove~,function(e){e.preventDefault()});$(document).off(~click.amee~,~.ame-edit~).on(~click.amee~,~.ame-edit~,function(){var li=$(this).closest(~li~),hd=li.children(~.ame-head~);function snap(){return hd.find(~.ame-title,.ame-url~).map(function(){return this.value}).get().join(~|~)}if(!li.hasClass(~is-edit~)){li.addClass(~is-edit~).data(~snap~,snap());hd.find(~.ame-title~).focus();return}if(document.activeElement){document.activeElement.blur()}var isnew=li.hasClass(~ame-new~);if(isnew&&!hd.find(~.ame-title~).val()&&!hd.find(~.ame-url~).val()){li.remove();return}if(isnew||li.data(~snap~)!==snap()){var f=li.closest(~form~)[0];if(f){if(f.requestSubmit){f.requestSubmit()}else{$(f).trigger(~submit~)}return}}li.removeClass(~is-edit~)});$(document).off(~focusin.amee~,~.ame-head .ame-title,.ame-head .ame-url~).on(~focusin.amee~,~.ame-head .ame-title,.ame-head .ame-url~,function(){$(this).closest(~li~).addClass(~is-edit~)});$(document).off(~focusout.amee~,~.ame-head~).on(~focusout.amee~,~.ame-head~,function(){var h=this,li=$(h).closest(~li~);setTimeout(function(){if(!h.contains(document.activeElement)&&!li.hasClass(~ame-new~)){li.removeClass(~is-edit~)}},0)});$(document).off(~keydown.amee~,~.ame-head .ame-title,.ame-head .ame-url~).on(~keydown.amee~,~.ame-head .ame-title,.ame-head .ame-url~,function(e){if(e.which===13){e.preventDefault();$(this).blur()}});var n=0;$(~.ame-add~).on(~click~,function(){var ul=$(this).closest(~p~).prevAll(~ul.ame-list~).first();n++;var p=~bar[0][rows][~+(900+n)+~]~;var h=$(~<div>~).addClass(~ame-head~);h.append($(~<span>~).addClass(~ame-grip~).html(~&#8942;&#8942;~));h.append($(~<input>~).attr({type:~hidden~,name:p+~[slug]~,value:~new~}));h.append($(~<input>~).attr({type:~hidden~,name:p+~[pos]~,value:0}).addClass(~pos~));h.append($(~<input>~).attr({type:~text~,name:p+~[title]~,placeholder:~' . esc_js(self::t('Name')) . '~}).addClass(~ame-title~));h.append($(~<input>~).attr({type:~text~,name:p+~[url]~,list:~ame-urls~,placeholder:~' . esc_js(self::t('URL or admin page')) . '~}).addClass(~ame-url~));h.append($(~<input>~).attr({type:~hidden~,name:p+~[custom]~,value:1}));h.append($(~<button>~).attr({type:~button~,title:~' . esc_js(__('Delete')) . '~}).addClass(~ame-remove~).html(' . wp_json_encode(self::TRASH) . '));h.append($(~<label>~).addClass(~ame-hide~).append($(~<input>~).attr({type:~checkbox~,name:p+~[hidden]~,value:1})).append($(~<span>~).addClass(~ame-eye~).html(' . wp_json_encode(self::EYE_INNER) . ')));h.append($(~<button>~).attr({type:~button~,title:~' . esc_js(self::t('Edit')) . '~}).addClass(~ame-edit~).html(' . wp_json_encode(self::PEN) . '));var li=$(~<li>~).addClass(~ame-row ame-custom ame-new is-edit~).append(h);ul.append(li);$(~.ame-list~).sortable(~refresh~);li[0].scrollIntoView({block:~center~});h.find(~.ame-title~).focus()});$(~.ame-form~).on(~submit~,function(){$(~.ame-title[data-orig]~).each(function(){if($(this).val()===$(this).attr(~data-orig~)){$(this).val(~~)}});$(~ul.ame-list~).each(function(){var idx=$(this).data(~idx~);$(this).children(~li~).each(function(i){var hd=$(this).children(~.ame-head~);hd.find(~input~).each(function(){var nm=this.name;if(nm&&nm.indexOf(~bar[~)===0){this.name=~bar[~+idx+~][rows][~+i+~]~+nm.substring(nm.lastIndexOf(~[~))}});hd.find(~.pos~).val(i)})})})});</script>';
+    $h = '<div class=~wrap ame ame-tab-' . $tab . ' ame-lang-' . self::lang() . '~><header class=~ame-header~><span class=~ame-brand~><img class=~ame-logo~ src=~' . esc_url(plugin_dir_url(__FILE__) . 'assets/adminino-icon.svg') . '~ alt=~~ width=~32~ height=~32~><h1>' . esc_html(self::t('Adminino')) . '</h1></span><span class=~ame-header-note~>' . esc_html(self::t('By Rino de Boer')) . '</span></header>' . MK_AME_Extras::sidebar($tab, $base) . '';
+    if (isset($_GET['saved'])) { $h .= self::toast(self::t('Saved.')); }
+    if (isset($_GET['reset'])) { $h .= self::toast(self::t('Reset to the defaults.')); }
+    if ($tab === 'colors' || $tab === 'logos' || $tab === 'menulogo' || $tab === 'loginlogo' || $tab === 'order' || in_array($tab, MK_AME_Extras::TABS, true)) {
       // These tabs print their own markup with normal quotes.
       $body = in_array($tab, MK_AME_Extras::TABS, true) ? MK_AME_Extras::tab($tab) : ($tab === 'order' ? MK_AME_Order::tab() : MK_AME_Design::tab($tab));
       echo strtr($css . $h, '~', chr(34)) . $body . MK_AME_Extras::sidebar_end() . '</div>';
       return;
     }
-    $h .= $tab === 'top' ? self::tab_top() : self::tab_left();
+    $h .= ($tab === 'top' || $tab === 'topfront') ? self::tab_top($tab === 'topfront' ? 'front' : 'admin') : self::tab_left();
     $h .= MK_AME_Extras::sidebar_end();
     // Hiding a parent also shows its sub items as hidden (ticked and locked). On save their own choice is sent,
     // so unhiding the parent later brings them back exactly as they were.
@@ -578,12 +683,33 @@ final class MK_Admin_Menu {
     echo strtr($css . $h . $js . '</div>', '~', chr(34));
   }
 
-  private static function forms($list_html, $save, $reset, $hidden = '', $show_reset = true, $show_save = true) {
+  // Edit menu of a separator: Duplicate or Delete. WordPress separators cannot be removed, so Delete hides those.
+  private static function sep_assets() {
+    $css = '<style>.ame .ame-row > .ame-head > .ame-sepedit{order:8;flex:none;visibility:visible}.ame .ame-row > .ame-head:hover > .ame-sepedit,.ame .ame-row.is-sepm > .ame-head > .ame-sepedit{visibility:visible}@media(hover:none){.ame .ame-row > .ame-head > .ame-sepedit{visibility:visible}}.ame-sepedit{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;padding:0;margin:0;border:0;border-radius:6px;background:none;cursor:pointer;color:#8c8f94}.ame-sepedit:hover{background:#f0f0f1;color:#1d2327}.ame-sepedit svg{width:18px;height:18px;pointer-events:none}.ame-sepedit .ck{display:none}'
+      . '.ame-sepm{position:absolute;z-index:60;right:8px;top:calc(100% + 4px);background:#fff;border:1px solid #dcdcde;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.15);padding:6px;display:flex;flex-direction:column;min-width:150px}.ame-sepm button{background:none;border:0;border-radius:5px;text-align:left;padding:8px 10px;font-size:13px;cursor:pointer;color:#1d2327}.ame-sepm button:hover{background:#f0f0f1}.ame-sepm button.del{color:#b32d2e}.ame-sepm button.del:hover{background:#fcf0f1}.ame-flash > .ame-head{box-shadow:0 0 0 2px var(--amx-main,#2271b1);transition:box-shadow .3s}.ame-pulse{box-shadow:0 0 0 3px var(--amx-tint,#f0f6fc)!important}</style>';
+    $js = '<script>jQuery(function($){var DUP=' . wp_json_encode(self::t('Duplicate')) . ',DEL=' . wp_json_encode(__('Delete')) . ';function close(){$(~.ame-sepm~).remove();$(~.is-sepm~).removeClass(~is-sepm~);}'
+      . 'function send(li){var f=li.closest(~form~)[0];if(f){if(f.requestSubmit){f.requestSubmit();}else{$(f).trigger(~submit~);}}}'
+      . '$(document).off(~click.amsep~).on(~click.amsep~,~.ame-sepedit~,function(e){e.preventDefault();var b=$(this),hd=b.closest(~.ame-head~),li=hd.closest(~li~);if(hd.find(~.ame-sepm~).length){close();return;}close();li.addClass(~is-sepm~);hd.css(~position~,~relative~);var m=$(~<div class=ame-sepm></div>~);'
+      . 'm.append($(~<button type=button></button>~).text(DUP).on(~click~,function(){var c=li.clone();c.removeClass(~is-sepm~).find(~.ame-sepm~).remove();var k=900+$(~.ame-sep~).length+Math.floor(Math.random()*90);c.find(~input~).each(function(){if(this.name){this.name=this.name.replace(/^top\\[\\d+\\]/,~top[~+k+~]~);}});c.find(~input[name$=\'[slug]\']~).val(~separator-mk-~+Date.now().toString(36));c.find(~.ame-hide input~).prop(~checked~,false);li.after(c);close();$(~.ame-list~).sortable(~refresh~);c.addClass(~ame-flash~);setTimeout(function(){c.removeClass(~ame-flash~);},1600);c.closest(~form~).find(~.submit .button-primary~).addClass(~ame-pulse~);}));'
+      . 'm.append($(~<button type=button class=del></button>~).text(DEL).on(~click~,function(){var sl=li.find(~input[name$=\'[slug]\']~).val()||~~;close();if(sl.indexOf(~separator-mk-~)===0){var f=li.closest(~form~);li.remove();send(f.find(~li~).first().length?f.find(~li~).first():f);}else{li.find(~.ame-hide input~).prop(~checked~,true).trigger(~change~);send(li);}}));'
+      . 'hd.append(m);});$(document).off(~mousedown.amsep~).on(~mousedown.amsep~,function(e){if(!$(e.target).closest(~.ame-sepm,.ame-sepedit~).length){close();}});});</script>';
+    return $css . $js;
+  }
+
+  // A small message in the profile color that floats over the page and fades out, so nothing shifts.
+  public static function toast($msg) {
+    $css = '<style>.amx-toast{position:fixed;right:24px;bottom:24px;z-index:100000;display:flex;align-items:center;gap:10px;background:var(--amx-main,#2271b1);color:#fff;padding:12px 20px 12px 14px;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.22);font-size:14px;font-weight:600;line-height:1.3;animation:amxToastIn .25s ease-out}.amx-toast svg{width:18px;height:18px;flex:none}.amx-toast.out{opacity:0;transform:translateY(8px);transition:opacity .3s,transform .3s}@keyframes amxToastIn{from{opacity:0;transform:translateY(10px)}}</style>';
+    $ic = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+    $js = '<script>(function(){var t=document.querySelectorAll(".amx-toast");t=t[t.length-1];if(!t)return;setTimeout(function(){t.classList.add("out");},2400);setTimeout(function(){if(t.parentNode){t.parentNode.removeChild(t);}},2800);try{var u=new URL(location.href);["saved","reset","imported","n"].forEach(function(k){u.searchParams.delete(k);});history.replaceState(history.state,"",u.toString());}catch(e){}})();</script>';
+    return $css . '<div class="amx-toast" role="status">' . $ic . '<span>' . esc_html($msg) . '</span></div>' . $js;
+  }
+
+  private static function forms($list_html, $save, $reset, $hidden = '', $show_reset = true, $show_save = true, $reset_hidden = '') {
     $h = '<form class=~ame-form~ method=~post~ action=~' . esc_url(admin_url('admin-post.php')) . '~><input type=~hidden~ name=~action~ value=~' . $save . '~>' . wp_nonce_field($save, '_wpnonce', true, false) . $hidden . $list_html;
     if ($show_save) { $h .= '<p class=~submit~><button type=~submit~ class=~button button-primary~>' . esc_html(self::t('Save changes')) . '</button></p>'; }
     $h .= '</form>';
     if (!$show_reset) { return $h; }
-    $h .= '<form method=~post~ action=~' . esc_url(admin_url('admin-post.php')) . '~ onsubmit=~return confirm(&quot;' . esc_attr(self::t('Reset everything to the defaults?')) . '&quot;)~><input type=~hidden~ name=~action~ value=~' . $reset . '~>' . wp_nonce_field($reset, '_wpnonce', true, false) . '<button type=~submit~ class=~button-link button-link-delete~>' . esc_html(self::t('Reset to defaults')) . '</button></form>';
+    $h .= '<form method=~post~ action=~' . esc_url(admin_url('admin-post.php')) . '~ onsubmit=~return confirm(&quot;' . esc_attr(self::t('Reset everything to the defaults?')) . '&quot;)~><input type=~hidden~ name=~action~ value=~' . $reset . '~>' . wp_nonce_field($reset, '_wpnonce', true, false) . $reset_hidden . '<button type=~submit~ class=~button-link button-link-delete~>' . esc_html(self::t('Reset to defaults')) . '</button></form>';
     return $h;
   }
 
@@ -594,13 +720,28 @@ final class MK_Admin_Menu {
     $s = self::scope_effective($sc);
     $tops = $o['menu'];
     ksort($tops, SORT_NUMERIC);
+    global $_wp_real_parent_file;
+    $live = [];
+    foreach ((array) $menu as $lv) { if (isset($lv[2])) { $live[$lv[2]] = 1; } }
+    if ($live) {
+      foreach ($tops as $tk => $tv) {
+        $tsl = isset($tv[2]) ? $tv[2] : '';
+        if (isset($live[$tsl]) || strpos($tsl, 'separator') === 0 || isset($_wp_real_parent_file[$tsl])) { continue; }
+        unset($tops[$tk]);
+      }
+    }
     $byslug = [];
     foreach ($tops as $it) { $byslug[$it[2]] = $it; }
     $st = [];
     foreach ((array) (isset($s['top']) ? $s['top'] : []) as $t) { $st[$t['slug']] = $t; }
+    foreach ($st as $slug => $t) { if (strpos($slug, 'separator-mk-') === 0 && !isset($byslug[$slug])) { $byslug[$slug] = ['', 'read', $slug, '', 'wp-menu-separator']; } }
     $order = [];
     foreach ($st as $slug => $t) { if (isset($byslug[$slug])) { $order[] = $slug; } }
     foreach ($byslug as $slug => $it) { if (!in_array($slug, $order, true)) { $order[] = $slug; } }
+    $ic = get_option(self::ICONS, []);
+    // The icon buttons are always there, unless all icons are switched off.
+    $lucide = empty($ic['off']);
+    if ($lucide) { MK_AME_Look::ensure(); }
     $h = self::cols(false) . '<ul class=~ame-list~>';
     $i = 0;
     foreach ($order as $slug) {
@@ -630,6 +771,7 @@ final class MK_Admin_Menu {
         }
         $inner .= '</ul>';
       }
+      if (!$sep && $lucide) { $extra .= MK_AME_Look::picker_cell($slug, isset($it[6]) ? $it[6] : ''); }
       $h .= self::row('top[' . $i . ']', $slug, self::plain($it[0]), $t['title'], $t['hidden'], $sep, $extra) . $inner . '</li>';
       $i++;
     }
@@ -638,8 +780,8 @@ final class MK_Admin_Menu {
     $locked = !$isdef && self::scope_own($sc) === null;
     $hidden = '<input type=~hidden~ name=~role~ value=~' . esc_attr($sc['role']) . '~><input type=~hidden~ name=~user~ value=~' . (int) $sc['user'] . '~>';
     $form = self::forms($h, 'mk_ame_save', 'mk_ame_reset', $hidden, $isdef, !$locked);
-    $msg = '';
-    return self::scope_css() . self::scope_bar($sc) . '<div class=~amx-sg~><div class=~' . ($locked ? 'amx-lock' : '') . '~>' . $msg . $form . '</div>' . self::scope_preview($sc) . '</div>';
+    $msg = MK_AME_Look::quick_icons('left');
+    return self::scope_css() . self::scope_bar($sc) . '<div class=~amx-sg~><div class=~' . ($locked ? 'amx-lock' : '') . '~>' . $msg . $form . '</div>' . self::scope_preview($sc) . '</div>' . ($lucide ? MK_AME_Look::picker_assets() : '') . self::sep_assets();
   }
 
   // All known top bar items: simulated live, plus items seen earlier (including on the front end)
@@ -667,7 +809,7 @@ final class MK_Admin_Menu {
     foreach ($live as $id => $r) { if (strpos($id, 'mk-ame-link-') !== 0) { $live[$id]['a'] = 1; } }
     foreach ($seen as $id => $r) {
       if (!isset($live[$id])) { $live[$id] = $r; continue; }
-      foreach (['a', 'f'] as $c) { if (!empty($r[$c])) { $live[$id][$c] = 1; } }
+      foreach (['a', 'f', 'oa', 'of'] as $c) { if (!empty($r[$c])) { $live[$id][$c] = $r[$c]; } }
     }
     return $live;
   }
@@ -699,16 +841,8 @@ final class MK_Admin_Menu {
         $cc = $cm[$id];
         $title = $cc['title'];
         $extra = '<input type=~text~ class=~ame-url~ list=~ame-urls~ name=~' . $nm . '[url]~ value=~' . esc_attr($cc['url']) . '~ placeholder=~' . esc_attr(self::t('URL')) . '~><input type=~hidden~ name=~' . $nm . '[custom]~ value=~1~><input type=~hidden~ class=~ame-del~ name=~' . $nm . '[del]~ value=~0~><button type=~button~ class=~ame-remove~ title=~' . esc_attr__('Delete') . '~>' . self::TRASH . '</button>' . $extra;
-        $w = isset($cc['where']) ? $cc['where'] : 'front';
-        $extra = '<select class=~ame-wsel~ name=~' . $nm . '[where]~><option value=~both~' . selected($w, 'both', false) . '>' . esc_html(self::t('Admin and frontend')) . '</option><option value=~admin~' . selected($w, 'admin', false) . '>' . esc_html(self::t('Admin only')) . '</option><option value=~front~' . selected($w, 'front', false) . '>' . esc_html(self::t('Frontend only')) . '</option></select>' . $extra;
-        if ($w === 'admin') { $extra = '<span class=~ame-where ame-where-a~>' . esc_html(self::t('Admin only')) . '</span>' . $extra; }
-        elseif ($w === 'front') { $extra = '<span class=~ame-where ame-where-f~>' . esc_html(self::t('Frontend only')) . '</span>' . $extra; }
       }
-      if (self::$ctxk && !isset($cm[$id])) {
-        $ia = !empty($nodes[$id]['a']); $if = !empty($nodes[$id]['f']);
-        if ($ia && !$if) { $extra = '<span class=~ame-where ame-where-a~>' . esc_html(self::t('Admin only')) . '</span>' . $extra; }
-        elseif ($if && !$ia) { $extra = '<span class=~ame-where ame-where-f~>' . esc_html(self::t('Frontend only')) . '</span>' . $extra; }
-      }
+      if (self::$barico && !in_array($id, ['search', 'my-account', 'menu-toggle'], true)) { $extra .= MK_AME_Look::bar_picker_cell($id, self::$barctx === 'front'); }
       $h .= self::row($nm, $id, $ph, $title, $saved ? $saved['hidden'] : 0, false, $extra, !empty($nodes[$id]['i']) && !isset($cm[$id])) . $inner . '</li>';
       $j++;
     }
@@ -719,21 +853,38 @@ final class MK_Admin_Menu {
   const EYE_INNER='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="on"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="off"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg>';
   const EYE='<span class="ame-eye"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="on"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="off"><path d="M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49"/><path d="M14.084 14.158a3 3 0 0 1-4.242-4.242"/><path d="M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143"/><path d="m2 2 20 20"/></svg></span>';
   private static function bar_preview() {
-    $js = '<script>jQuery(function($){var root=document.querySelector(~.ame-tab-top~);var bar=document.getElementById(~amx-bar~);if(!root||!bar)return;var L=bar.querySelector(~.l~),R=bar.querySelector(~.r~);'
-      . 'function items(ul){var o=[];ul.querySelectorAll(~:scope > li:not(.ame-sep)~).forEach(function(li){var hd=li.querySelector(~:scope > .ame-head~);if(!hd)return;var cb=hd.querySelector(~.ame-hide input~);if(cb&&cb.checked)return;var ti=hd.querySelector(~.ame-title~);var n=ti?(ti.value||ti.getAttribute(~placeholder~)||~~):~~;var icon=!!hd.querySelector(~.ame-icon-note~);var ps=hd.querySelector(~input.pos~);var sl=ps?ps.previousElementSibling:null;var id=sl?sl.value.replace(/^wp-admin-bar-/,~~):~~;if(!n&&!icon)return;o.push({n:n,i:icon&&!ti.value,id:id});});return o;}'
-      . 'var IC={~wp-logo~:~wordpress~,~menu-toggle~:~menu~,~site-name~:~admin-home~,~comments~:~admin-comments~,~new-content~:~plus~,~updates~:~update~,~search~:~search~,~edit~:~edit~,~customize~:~admin-customizer~,~appearance~:~admin-appearance~,~view~:~visibility~,~archive~:~archive~};var CT={~comments~:~2~,~updates~:~3~};var ONLY={~wp-logo~:1,~menu-toggle~:1,~search~:1};function fill(box,list){box.innerHTML=~~;list.forEach(function(x){var d=document.createElement(~span~);var ic=IC[x.id];if(ic){var e=document.createElement(~b~);e.className=~dashicons dashicons-~+ic;d.appendChild(e);}else if(x.i){var c=document.createElement(~i~);d.appendChild(c);}var nm=x.n;if(x.id===~my-account~)nm=(nm||~Howdy, %s~).replace(/%\d?\$?s/,~Rino~);if(!(ic&&ONLY[x.id])&&!x.i){d.appendChild(document.createTextNode(nm));}var ct=CT[x.id];if(ct){if(x.id===~comments~){var b=document.createElement(~em~);b.textContent=ct;d.appendChild(b);}else{d.appendChild(document.createTextNode(ct));}}if(x.id===~my-account~){var av=document.createElement(~u~);d.appendChild(av);}box.appendChild(d);});}'
+    $js = '<script>jQuery(function($){var root=document.querySelector(~.wrap.ame~);var bar=document.getElementById(~amx-bar~);if(!root||!bar)return;var L=bar.querySelector(~.l~),R=bar.querySelector(~.r~);'
+      . 'function items(ul){var o=[];ul.querySelectorAll(~:scope > li:not(.ame-sep)~).forEach(function(li){var hd=li.querySelector(~:scope > .ame-head~);if(!hd)return;var cb=hd.querySelector(~.ame-hide input~);if(cb&&cb.checked)return;var ti=hd.querySelector(~.ame-title~);var n=ti?(ti.value||ti.getAttribute(~placeholder~)||~~):~~;var icon=!!hd.querySelector(~.ame-icon-note~);var ps=hd.querySelector(~input.pos~);var sl=ps?ps.previousElementSibling:null;var id=sl?sl.value.replace(/^wp-admin-bar-/,~~):~~;if(!n&&!icon)return;var ib=hd.querySelector(~.ame-ico.is-lu~);o.push({n:n,i:icon&&!ti.value,id:id,h:ib?ib.innerHTML:~~});});return o;}'
+      . 'var IC={~wp-logo~:~wordpress~,~menu-toggle~:~menu~,~site-name~:~admin-home~,~comments~:~admin-comments~,~new-content~:~plus~,~updates~:~update~,~search~:~search~,~edit~:~edit~,~customize~:~admin-customizer~,~appearance~:~admin-appearance~,~view~:~visibility~,~archive~:~archive~};var CT={~comments~:~2~,~updates~:~3~};var ONLY={~wp-logo~:1,~menu-toggle~:1,~search~:1};function fill(box,list){box.innerHTML=~~;list.forEach(function(x){var d=document.createElement(~span~);var ic=x.h?null:IC[x.id];if(x.h){var lb=document.createElement(~b~);lb.className=~lu~;lb.innerHTML=x.h;d.appendChild(lb);}else if(ic){var e=document.createElement(~b~);e.className=~dashicons dashicons-~+ic;d.appendChild(e);}else if(x.i){var c=document.createElement(~i~);d.appendChild(c);}var nm=x.n;if(x.id===~my-account~)nm=(nm||~Howdy, %s~).replace(/%\d?\$?s/,~Rino~);if(!(ic&&ONLY[x.id])&&!x.i){d.appendChild(document.createTextNode(nm));}var ct=CT[x.id];if(ct){if(x.id===~comments~){var b=document.createElement(~em~);b.textContent=ct;d.appendChild(b);}else{d.appendChild(document.createTextNode(ct));}}if(x.id===~my-account~){var av=document.createElement(~u~);d.appendChild(av);}box.appendChild(d);});}'
       . 'function run(){var left=[],right=[];root.querySelectorAll(~form ul.ame-list:not(.ame-sub)~).forEach(function(ul){var pr=ul.previousElementSibling;var par=pr&&pr.tagName===~INPUT~?pr.value:~~;if(par===~top-secondary~)right=items(ul);else if(par===~~)left=items(ul);});fill(L,left);fill(R,right);}'
       . 'run();var f=root.querySelector(~form~);if(f){f.addEventListener(~input~,run);f.addEventListener(~change~,run);f.addEventListener(~click~,function(){setTimeout(run,30);});}$(root).on(~sortupdate sortstop sortreceive~,function(){setTimeout(run,0);});});</script>';
     $css = '<style>.amx-barpv{position:sticky;top:32px;z-index:6;margin:22px 0 4px;padding-top:6px;background:#fff}.amx-barpv .amx-bar{display:flex;justify-content:space-between;align-items:center;background:#1d2327;border-radius:6px;height:34px;padding:0 6px;color:#f0f0f1;font-size:13px;overflow:hidden}'
-      . '.amx-bar .l,.amx-bar .r{display:flex;align-items:center;height:34px;min-width:0}.amx-bar .r{flex-direction:row-reverse}.amx-bar span{display:inline-flex;align-items:center;gap:5px;height:34px;padding:0 9px;white-space:nowrap;line-height:1}'
+      . '.amx-bar .l,.amx-bar .r{display:flex;align-items:center;height:34px;min-width:0}.amx-bar .l{flex:0 1 auto;overflow:hidden}.amx-bar .r{flex:none;flex-direction:row-reverse}.amx-bar span{display:inline-flex;align-items:center;gap:5px;height:34px;padding:0 9px;white-space:nowrap;line-height:1}'
       . '.amx-bar .dashicons{display:block;flex:none;font-size:18px;width:18px;height:18px;line-height:1;color:#a7aaad;margin:0}.amx-bar i{display:block;flex:none;width:16px;height:16px;border-radius:50%;background:#a7aaad}'
-      . '.amx-bar u{display:block;flex:none;width:18px;height:18px;border-radius:3px;background:#8c8f94;margin-left:4px}.amx-bar em{font-style:normal;display:block;background:#d63638;color:#fff;border-radius:9px;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;font-size:11px;line-height:18px;text-align:center}</style>';
+      . '.amx-bar b.lu{display:flex;width:18px;height:18px;color:#a7aaad}.amx-bar b.lu svg,.amx-bar b.lu .ame-svgm{width:18px;height:18px}.amx-bar u{display:block;flex:none;width:18px;height:18px;border-radius:3px;background:#8c8f94;margin-left:4px}.amx-bar em{font-style:normal;display:block;background:#d63638;color:#fff;border-radius:9px;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;font-size:11px;line-height:18px;text-align:center}</style>';
     return $css . '<div class=~amx-barpv~><div class=~amx-bar~ id=~amx-bar~><div class=~l~></div><div class=~r~></div></div></div>' . $js;
   }
 
-  private static function tab_top() {
+  private static function tab_top($ctx = 'admin') {
+    self::$barctx = $ctx;
+    self::$barico = true;
+    MK_AME_Look::ensure();
     $nodes = self::bar_nodes();
-    $s = get_option(self::BAR, []);
+    // Only the items of this bar: the admin bar or the bar on the website, plus the parents they sit in.
+    $flag = $ctx === 'front' ? 'f' : 'a';
+    $cw = [];
+    foreach (self::custom_links() as $cl) { $cw[$cl['id']] = isset($cl['where']) ? $cl['where'] : 'both'; }
+    $keep = [];
+    foreach ($nodes as $id => $n) {
+      if (isset($cw[$id])) { if ($cw[$id] === $ctx || $cw[$id] === 'both') { $keep[$id] = 1; } continue; }
+      if (!empty($n[$flag])) { $keep[$id] = 1; }
+    }
+    foreach (array_keys($keep) as $id) {
+      $p = $nodes[$id]['p']; $guard = 0;
+      while ($p !== '' && isset($nodes[$p]) && $guard++ < 8) { $keep[$p] = 1; $p = $nodes[$p]['p']; }
+    }
+    $nodes = array_intersect_key($nodes, $keep);
+    $s = get_option($ctx === 'front' ? self::BARF : self::BAR, []);
     $sm = isset($s['lists']) && is_array($s['lists']) ? $s['lists'] : [];
     $kids = [];
     self::$gb = [];
@@ -741,17 +892,26 @@ final class MK_Admin_Menu {
       if (!empty($n['g'])) { if ($n['p'] !== '') { self::$gb[$n['p']][] = $id; } continue; }
       $kids[$n['p']][] = $id;
     }
+    // Same order as the real bar in this context; items never seen here keep their place at the end.
+    $ok = 'o' . $flag;
+    foreach ($kids as $kp => $ids) {
+      $ix = array_flip($ids);
+      usort($ids, function ($a, $b) use ($nodes, $ok, $ix) {
+        $oa = isset($nodes[$a][$ok]) ? (int) $nodes[$a][$ok] : PHP_INT_MAX;
+        $ob = isset($nodes[$b][$ok]) ? (int) $nodes[$b][$ok] : PHP_INT_MAX;
+        return $oa === $ob ? $ix[$a] - $ix[$b] : ($oa < $ob ? -1 : 1);
+      });
+      $kids[$kp] = $ids;
+    }
     $roots = [];
     foreach (array_keys($kids) as $p) {
       $isg = isset($nodes[$p]) && !empty($nodes[$p]['g']);
       if ($p === '' || !isset($nodes[$p]) || ($isg && $nodes[$p]['p'] === '')) { $roots[] = $p; }
     }
     usort($roots, function ($a, $b) { return ($a === '' ? 0 : 1) - ($b === '' ? 0 : 1); });
-    $h = '<h2 class=~amx-t~>' . esc_html(self::t('Top Menu Editor')) . '</h2><p class=~amx-lead~>' . esc_html(self::t('The black bar at the top, in the admin and on the website. Drag to reorder, rename, or hide items.')) . '</p>';
-    self::$ctxk = false;
-    foreach ($nodes as $n) { if (!empty($n['f'])) { self::$ctxk = true; break; } }
-    $h .= '<p class=~description~>' . esc_html(self::$ctxk ? self::t('Admin only: shown in the admin. Frontend only: shown on the website. No label: both.') : self::t('Visit the website once while logged in to see more items here.')) . '</p>';
-    $h .= self::bar_preview();
+    $h = '<h2 class=~amx-t~>' . esc_html(self::t($ctx === 'front' ? 'Top bar on the frontend' : 'Top bar in the admin')) . '</h2><p class=~amx-lead~>' . esc_html(self::t($ctx === 'front' ? 'The black bar on your website, shown to logged-in users. Drag to reorder, rename, or hide items.' : 'The black bar at the top of the admin. Drag to reorder, rename, or hide items.')) . '</p>';
+    if ($ctx === 'front') { $h .= '<p class=~description~>' . esc_html(self::t('Only items that have shown up on your website are listed. Visit the website while logged in to see more.')) . '</p>'; }
+    $h .= MK_AME_Look::quick_icons($ctx === 'front' ? 'topfront' : 'top') . self::bar_preview();
     $k = 0;
     foreach ($roots as $p) {
       $title = $p === '' ? self::t('Top bar: left side') : ($p === 'top-secondary' ? self::t('Top bar: right side') : $p);
@@ -762,7 +922,8 @@ final class MK_Admin_Menu {
     foreach (['plugins.php' => self::t('Plugins'), 'themes.php' => self::t('Themes'), 'edit.php?post_type=page' => self::t('Pages'), 'upload.php' => self::t('Media'), 'users.php' => self::t('Users'), 'options-general.php' => self::t('Settings'), 'site-editor.php' => self::t('Site Editor'), 'admin.php?page=fluent-snippets' => 'Fluent Snippets', 'admin.php?page=fluent-cart' => 'FluentCart', 'admin.php?page=fluent-booking' => 'Fluent Booking'] as $u => $l) { $dl .= '<option value=~' . esc_attr($u) . '~>' . esc_html($l) . '</option>'; }
     foreach ((array) get_pages(['number' => 50]) as $pg) { $dl .= '<option value=~' . esc_attr(get_permalink($pg)) . '~>' . esc_html($pg->post_title) . '</option>'; }
     $h .= $dl . '</datalist>';
-    return self::forms($h, 'mk_ame_save_bar', 'mk_ame_reset_bar');
+    $hid = '<input type=~hidden~ name=~ctx~ value=~' . $ctx . '~>';
+    return self::forms($h, 'mk_ame_save_bar', 'mk_ame_reset_bar', $hid, true, true, $hid) . (self::$barico ? MK_AME_Look::picker_assets() : '');
   }
 }
 MK_Admin_Menu::init();
@@ -772,6 +933,8 @@ require_once __DIR__ . '/includes/ordering.php';
 MK_AME_Order::init();
 require_once __DIR__ . '/includes/extras.php';
 MK_AME_Extras::init();
+require_once __DIR__ . '/includes/look.php';
+MK_AME_Look::init();
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), function ($links) {
   array_unshift($links, '<a href="' . esc_url(admin_url('admin.php?page=mk-admin-menu')) . '">' . esc_html__('Settings') . '</a>');
   return $links;

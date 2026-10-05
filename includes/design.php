@@ -376,7 +376,8 @@ final class MK_AME_Design {
     $n = function ($k, $def, $min, $max) { $v = isset($_POST[$k]) ? (int) $_POST[$k] : $def; return max($min, min($max, $v)); };
     $d = self::logo_defaults();
     $post = function ($k) { return isset($_POST[$k]) ? wp_unslash($_POST[$k]) : null; };
-    update_option(self::LOGOS, [
+    $part = isset($_POST['part']) ? sanitize_key($_POST['part']) : '';
+    $new = [
       'menu_id' => self::img_id(isset($_POST['menu_id']) ? $_POST['menu_id'] : 0),
       'menu_w' => $n('menu_w', 120, self::MENU_MIN, self::MENU_MAX),
       'menu_align' => self::align(sanitize_key((string) $post('menu_align'))),
@@ -387,13 +388,26 @@ final class MK_AME_Design {
       'login_align' => self::align(sanitize_key((string) $post('login_align'))),
       'login_r' => $n('login_r', 0, 0, 200),
       'login_pad' => self::pad(is_array($post('login_pad')) ? $post('login_pad') : [], $d['login_pad']),
-    ]);
-    self::back('logos', 'saved');
+    ];
+    if ($part === 'menu' || $part === 'login') {
+      $cur = self::logos();
+      foreach ($new as $k => $v) { if (strpos($k, $part . '_') !== 0) { $new[$k] = $cur[$k]; } }
+    }
+    update_option(self::LOGOS, $new);
+    self::back($part === 'login' ? 'loginlogo' : 'menulogo', 'saved');
   }
   public static function reset_logos() {
     self::guard('mk_ame_reset_logos');
-    delete_option(self::LOGOS);
-    self::back('logos', 'reset');
+    $part = isset($_POST['part']) ? sanitize_key($_POST['part']) : '';
+    if ($part === 'menu' || $part === 'login') {
+      $raw = get_option(self::LOGOS, []);
+      $raw = is_array($raw) ? $raw : [];
+      foreach (array_keys($raw) as $k) { if (strpos($k, $part . '_') === 0) { unset($raw[$k]); } }
+      if ($raw) { update_option(self::LOGOS, $raw); } else { delete_option(self::LOGOS); }
+    } else {
+      delete_option(self::LOGOS);
+    }
+    self::back($part === 'login' ? 'loginlogo' : 'menulogo', 'reset');
   }
 
   // ---------- Settings page ----------
@@ -401,12 +415,12 @@ final class MK_AME_Design {
     if ($hook !== 'toplevel_page_' . MK_Admin_Menu::SLUG) { return; }
     $tab = isset($_GET['tab']) ? sanitize_key($_GET['tab']) : '';
     wp_enqueue_style('wp-color-picker'); wp_enqueue_script('wp-color-picker');
-    if ($tab === 'logos') { wp_enqueue_media(); }
+    if (in_array($tab, ['logos', 'menulogo', 'loginlogo'], true)) { wp_enqueue_media(); }
   }
 
-  private static function forms_end($save, $reset) {
+  private static function forms_end($save, $reset, $hid = '') {
     $h = '<p class="submit"><button type="submit" class="button button-primary">' . esc_html(self::t('Save changes')) . '</button></p></form>';
-    $h .= '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return confirm(&quot;' . esc_attr(self::t('Reset everything to the defaults?')) . '&quot;)"><input type="hidden" name="action" value="' . $reset . '">' . wp_nonce_field($reset, '_wpnonce', true, false) . '<button type="submit" class="button-link button-link-delete">' . esc_html(self::t('Reset to defaults')) . '</button></form>';
+    $h .= '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" onsubmit="return confirm(&quot;' . esc_attr(self::t('Reset everything to the defaults?')) . '&quot;)"><input type="hidden" name="action" value="' . $reset . '">' . wp_nonce_field($reset, '_wpnonce', true, false) . $hid . '<button type="submit" class="button-link button-link-delete">' . esc_html(self::t('Reset to defaults')) . '</button></form>';
     return $h;
   }
   private static function form_start($save) {
@@ -442,7 +456,8 @@ final class MK_AME_Design {
   }
 
   public static function tab($tab) {
-    return self::css() . ($tab === 'logos' ? self::tab_logos() : self::tab_colors());
+    if ($tab === 'loginlogo') { return self::css() . self::tab_logos('login'); }
+    return self::css() . (($tab === 'logos' || $tab === 'menulogo') ? self::tab_logos('menu') : self::tab_colors());
   }
 
   private static function tab_colors() {
@@ -453,7 +468,7 @@ final class MK_AME_Design {
     $h .= '<tr><th scope="row"><label for="amd-main">' . esc_html(self::t('Main color')) . '</label></th><td><input type="text" id="amd-main" name="main" class="amd-color" value="' . esc_attr($c['main']) . '" data-default-color="' . esc_attr(self::DEF_MAIN) . '"><p class="description">' . esc_html(self::t('The login page uses the main color too, for the login button, links and input focus.')) . '</p></td></tr></table>';
     $menu = self::src($l['menu_id']) ? self::logo_slot('menu', self::src($l['menu_id']), $l['menu_w'], $l['menu_align'], $l['menu_pad'], $l['menu_r']) : '';
     $login = self::src($l['login_id']) ? self::logo_slot('login', self::src($l['login_id']), $l['login_w'], $l['login_align'], $l['login_pad'], $l['login_r']) : '';
-    $h .= '<h3 class="amx-h3">' . esc_html(self::t('Preview')) . '</h3><div class="amd-prev" style="' . esc_attr(self::vars($c['main'])) . '"><div class="amd-prev-col"><h3>' . esc_html(self::t('Admin')) . '</h3>' . self::mock_admin($menu) . '</div><div class="amd-prev-col"><h3>' . esc_html(self::t('Login page')) . '</h3>' . self::mock_login($login) . '</div></div><p class="amd-note">' . esc_html(self::t('Placeholder content, only to show the colors.')) . '</p>';
+    $h .= '<h3 class="amx-h3">' . esc_html(self::t('Preview')) . '</h3><div class="amd-prev" style="' . esc_attr(self::vars($c['main'])) . '"><div class="amd-prev-col">' . self::mock_admin($menu) . '</div></div><p class="amd-note">' . esc_html(self::t('Placeholder content, only to show the colors.')) . '</p>';
     $h .= self::forms_end('mk_ame_save_colors', 'mk_ame_reset_colors');
     $h .= '<script>jQuery(function($){var O=' . wp_json_encode(self::orig()) . ',T="#7b90ff";' . self::js_color() . 'function paint(m){if(!/^#[0-9a-f]{6}$/i.test(m)){return;}var p=$(".amd-prev")[0],t=hsl(m),o=hsl(O),x=hsl(T);p.style.setProperty("--amd-main",m);p.style.setProperty("--amd-dark",hex(t[0],t[1],cl(t[2]-.1)));p.style.setProperty("--amd-light",hex(t[0],cl(t[1]+x[1]-o[1]),cl(t[2]+x[2]-o[2])));}$(".amd-color").wpColorPicker({change:function(e,ui){paint(ui.color.toString());},clear:function(){paint(' . wp_json_encode(self::DEF_MAIN) . ');}});});</script>';
     return $h;
@@ -488,17 +503,20 @@ final class MK_AME_Design {
     return $h;
   }
 
-  private static function tab_logos() {
+  // One logo per page: the menu logo under Left menu, the login logo under Look.
+  private static function tab_logos($part = 'menu') {
     $l = self::logos();
     $c = self::colors();
-    $h = '<h2 class="amx-t">' . esc_html(self::t('Logos')) . '</h2><p class="amd-intro">' . esc_html(self::t('Add your logo to the top of the left menu and to the login page. Use the width sliders to get the size right, the preview below updates straight away.')) . '</p>';
-    $h .= self::form_start('mk_ame_save_logos') . '<div class="amd-cards">';
-    $h .= self::logo_card('menu', self::t('Left menu logo'), 'Shown at the top of the left menu, above Dashboard. The menu has a dark background, so use a <strong>white version</strong> of your logo. A PNG with a transparent background or an SVG works best.', self::t('The menu is 160px wide. Between 100 and 130px usually looks best. The logo is hidden when the menu is collapsed.'), $l['menu_id'], $l['menu_w'], self::MENU_MIN, self::MENU_MAX, true);
-    $h .= self::logo_card('login', self::t('Login page logo'), 'Replaces the WordPress logo above the login form. The login page has a light background, so use a <strong>dark version</strong> of your logo. A PNG with a transparent background or an SVG works best.', self::t('The login form is 320px wide. Between 150 and 250px usually looks best.'), $l['login_id'], $l['login_w'], self::LOGIN_MIN, self::LOGIN_MAX, false);
+    $menu = $part !== 'login';
+    $h = '<h2 class="amx-t">' . esc_html(self::t($menu ? 'Left menu logo' : 'Login logo')) . '</h2><p class="amd-intro">' . esc_html(self::t($menu ? 'Add your logo to the top of the left menu. Use the width slider to get the size right, the preview updates straight away.' : 'Add your logo to the login page. Use the width slider to get the size right, the preview updates straight away.')) . '</p>';
+    $hid = '<input type="hidden" name="part" value="' . ($menu ? 'menu' : 'login') . '">';
+    $h .= self::form_start('mk_ame_save_logos') . $hid . '<div class="amd-cards" style="grid-template-columns:minmax(0,560px)">';
+    if ($menu) $h .= self::logo_card('menu', self::t('Left menu logo'), 'Shown at the top of the left menu, above Dashboard. The menu has a dark background, so use a <strong>white version</strong> of your logo. A PNG with a transparent background or an SVG works best.', self::t('The menu is 160px wide. Between 100 and 130px usually looks best. The logo is hidden when the menu is collapsed.'), $l['menu_id'], $l['menu_w'], self::MENU_MIN, self::MENU_MAX, true);
+    if (!$menu) $h .= self::logo_card('login', self::t('Login page logo'), 'Replaces the WordPress logo above the login form. The login page has a light background, so use a <strong>dark version</strong> of your logo. A PNG with a transparent background or an SVG works best.', self::t('The login form is 320px wide. Between 150 and 250px usually looks best.'), $l['login_id'], $l['login_w'], self::LOGIN_MIN, self::LOGIN_MAX, false);
     $h .= '</div>';
     $main = $c['on'] ? $c['main'] : self::DEF_MAIN;
-    $h .= '<h3 class="amx-h3">' . esc_html(self::t('Preview')) . '</h3><div class="amd-prev" style="' . esc_attr(self::vars($main)) . '"><div class="amd-prev-col"><h3>' . esc_html(self::t('Left menu')) . '</h3>' . self::mock_admin(self::logo_slot('menu', self::src($l['menu_id']), $l['menu_w'], $l['menu_align'], $l['menu_pad'], $l['menu_r'])) . '</div><div class="amd-prev-col"><h3>' . esc_html(self::t('Login page')) . '</h3>' . self::mock_login(self::logo_slot('login', self::src($l['login_id']), $l['login_w'], $l['login_align'], $l['login_pad'], $l['login_r'])) . '</div></div><p class="amd-note">' . esc_html(self::t('Placeholder content. Only the logos and their sizes are real.')) . '</p>';
-    $h .= self::forms_end('mk_ame_save_logos', 'mk_ame_reset_logos');
+    $h .= '<h3 class="amx-h3">' . esc_html(self::t('Preview')) . '</h3><div class="amd-prev" style="' . esc_attr(self::vars($main)) . ';grid-template-columns:minmax(0,560px)">' . ($menu ? '<div class="amd-prev-col">' . self::mock_admin(self::logo_slot('menu', self::src($l['menu_id']), $l['menu_w'], $l['menu_align'], $l['menu_pad'], $l['menu_r'])) . '</div>' : '<div class="amd-prev-col">' . self::mock_login(self::logo_slot('login', self::src($l['login_id']), $l['login_w'], $l['login_align'], $l['login_pad'], $l['login_r'])) . '</div>') . '</div><p class="amd-note">' . esc_html(self::t('Placeholder content. Only the logos and their sizes are real.')) . '</p>';
+    $h .= self::forms_end('mk_ame_save_logos', 'mk_ame_reset_logos', $hid);
     $txt = ['title' => self::t('Choose a logo'), 'use' => self::t('Use this logo'), 'ph' => self::t('Your logo')];
     $h .= '<script>jQuery(function($){var T=' . wp_json_encode($txt) . ';function size(k){var w=$("input[name="+k+"_w]").val();$("input[name="+k+"_w]").siblings("output").text(w+"px");$("[data-logo="+k+"] img,[data-logo="+k+"] .amd-ph").css("width",w+"px");var r=parseInt($("input[name="+k+"_r]").val(),10);r=isNaN(r)?0:Math.max(0,Math.min(200,r));$("[data-logo="+k+"] img,[data-logo="+k+"] .amd-ph").css("border-radius",r+"px");}function set(k,url){$("[data-logo="+k+"]").each(function(){$(this).empty().append(url?$("<img>").attr({src:url,alt:""}):$("<span>").addClass("amd-ph").text(T.ph));});var b=$(".amd-pick[data-key="+k+"]");b.find(".amd-thumb").empty().append(url?$("<img>").attr({src:url,alt:""}):"");b.find(".amd-remove").toggle(!!url);size(k);}$(".amd-pick").each(function(){var b=$(this),k=b.data("key"),fr;b.find(".amd-choose").on("click",function(e){e.preventDefault();if(!fr){fr=wp.media({title:T.title,button:{text:T.use},library:{type:"image"},multiple:false});fr.on("select",function(){var a=fr.state().get("selection").first().toJSON();b.find("input[type=hidden]").val(a.id);set(k,a.url);});}fr.open();});b.find(".amd-remove").on("click",function(e){e.preventDefault();b.find("input[type=hidden]").val("");set(k,"");});});$(".amd-range input,.amd-rad").on("input change",function(){size($(this).data("key"));});function lay(k){var c=$(".amd-card-set[data-key="+k+"]"),a=c.find(".amd-seg input:checked").val()||"center",p=c.find(".amd-pad").map(function(){var v=parseInt(this.value,10);return(isNaN(v)?0:Math.max(0,Math.min(100,v)))+"px";}).get().join(" ");$("[data-logo="+k+"]").css({textAlign:a,padding:p});}$(".amd-seg input,.amd-pad").on("input change",function(){lay($(this).closest(".amd-card-set").data("key"));});});</script>';
     return $h;
