@@ -14,7 +14,7 @@ if (!class_exists('MK_AME_Extras', false)) {
 final class MK_AME_Extras {
   const OPT = 'mk_ame_extras';
   const SEEN = 'mk_ame_dash_seen';
-  const TABS = ['overview', 'footer', 'dash', 'notices', 'dup', 'media', 'io', 'fonts', 'icons', 'baricons', 'spacing'];
+  const TABS = ['overview', 'footer', 'dash', 'notices', 'dup', 'media', 'io', 'fonts', 'icons', 'baricons', 'spacing', 'start', 'about', 'notes'];
 
   public static function init() {
     add_action('admin_post_mk_ame_save_extras', [__CLASS__, 'save']);
@@ -397,6 +397,9 @@ AMXJS;
       case 'icons': return MK_AME_Look::tab_icons('left');
       case 'baricons': return MK_AME_Look::tab_icons('bar');
       case 'spacing': return MK_AME_Look::tab_spacing();
+      case 'start':
+      case 'about':
+      case 'notes': return MK_AME_Help::tab($tab);
       default: return self::tab_overview();
     }
   }
