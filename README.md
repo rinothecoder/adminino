@@ -37,11 +37,10 @@ add_filter('mk_ame_locale', fn() => 'en_US');
 
 This repo is public, so updates need no setup. Sites check the latest GitHub release through the built-in updater in `includes/updater.php`.
 
-If the repo is ever made private again, create a fine-grained GitHub token with read-only **Contents** access and add it to `wp-config.php` on every site:
-
-```php
-define('MK_GITHUB_TOKEN', 'github_pat_...');
-```
+No GitHub token or wp-config.php change is needed. Existing `MK_GITHUB_TOKEN`
+settings are ignored by Adminino's public updater. Requests send no site cookies
+or credentials. Drafts and prereleases are ignored, and downloads are pinned to
+the commit behind the published release.
 
 The plugin row gets a **Check for updates** link to skip the 6 hour cache.
 
@@ -49,7 +48,7 @@ The plugin row gets a **Check for updates** link to skip the 6 hour cache.
 
 1. Bump `Version:` in the header of `admin-menu-manager.php`.
 2. Commit and push.
-3. Create a GitHub Release with a tag higher than the old version, e.g. `v1.0.1`. The release notes show up as the changelog in WordPress.
+3. Create a GitHub Release with a tag higher than the old version, e.g. `v1.3.3`. The release notes show up as the changelog in WordPress.
 
 The updater renames GitHub's zip folder back to `admin-menu-manager`, so the plugin folder stays the same on every site.
 
@@ -81,3 +80,7 @@ If the old Fluent Snippets version is still active, the plugin shows a notice an
 ## Author
 
 Rino de Boer
+
+## Latest release
+
+1.3.3 switches updates to the public `rinothecoder/adminino` repository and preserves the live role/user menu preview fixes. Menu, branding, color and ordering settings stay intact.

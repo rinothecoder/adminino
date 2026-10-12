@@ -2,10 +2,10 @@
 /**
  * Plugin Name: Adminino
  * Description: Controls the WordPress admin: order, names and visibility of the left menu and the admin bar, a custom color scheme, your logos in the menu and on the login page, and drag and drop post ordering. Settings under Settings > Adminino.
- * Version: 1.3.2
+ * Version: 1.3.3
  * Author: Rino de Boer
  * Requires PHP: 7.4
- * Update URI: https://github.com/rinothecoder/wp-admin-manager
+ * Update URI: https://github.com/rinothecoder/adminino
  */
 
 if (!defined('ABSPATH')) { exit; }
@@ -28,6 +28,7 @@ final class MK_Admin_Menu {
   const SLUG = 'mk-admin-menu';
   const SCOPES = 'mk_ame_menu_scopes';
   private static $orig = null;
+  private static $scope_menu = false;
   private static $gb = []; private static $sim = false;
   private static $barctx = 'admin'; private static $barico = false;
 
@@ -63,6 +64,7 @@ final class MK_Admin_Menu {
     add_action('admin_post_mk_ame_save', [__CLASS__, 'save']);
     add_action('admin_post_mk_ame_reset', [__CLASS__, 'reset']);
     add_action('admin_post_mk_ame_scope', [__CLASS__, 'scope_action']);
+    add_action('admin_post_mk_ame_scope_menu', [__CLASS__, 'scope_menu']);
     add_action('deleted_user', [__CLASS__, 'user_deleted']);
     add_action('admin_post_mk_ame_save_bar', [__CLASS__, 'save_bar']);
     add_action('admin_post_mk_ame_reset_bar', [__CLASS__, 'reset_bar']);
@@ -120,7 +122,10 @@ final class MK_Admin_Menu {
     return $d ? $d : null;
   }
   private static function scope_parent($sc) {
-    if ($sc['user'] && $sc['role'] !== 'all') { $s = self::scopes(); if (isset($s['roles'][$sc['role']])) { return $s['roles'][$sc['role']]; } }
+    if ($sc['user']) {
+      $s = self::scopes(); $u = get_userdata($sc['user']);
+      if ($u) { foreach ((array) $u->roles as $role) { if (isset($s['roles'][$role])) { return $s['roles'][$role]; } } }
+    }
     return self::raw(self::OPT);
   }
   private static function scope_effective($sc) {
@@ -150,6 +155,66 @@ final class MK_Admin_Menu {
   private static function scope_back($sc, $flag) {
     wp_safe_redirect(add_query_arg(['page' => self::SLUG, 'tab' => 'left', 'role' => $sc['role'], 'user' => $sc['user'], $flag => 1], admin_url('admin.php')));
     exit;
+  }
+
+  // Build a fresh WordPress menu in a separate, authenticated read request. Running the
+  // normal menu hooks as the target also covers plugins that register items conditionally.
+  public static function scope_menu() {
+    if (!current_user_can('manage_options')) { wp_send_json_error([], 403); }
+    check_admin_referer('mk_ame_scope_menu');
+    $sc = self::scope_req();
+    if (self::scope_default($sc)) { wp_send_json_error([], 400); }
+    $target = $sc['user'] ? get_userdata($sc['user']) : null;
+    if (!$target) {
+      $role = get_role($sc['role']);
+      if (!$role) { wp_send_json_error([], 400); }
+      $target = new WP_User();
+      // A non-persisted identity prevents role previews from inheriting an administrator's
+      // individual capabilities or Multisite super-admin status (including the ID 0 fallback).
+      $target->ID = -1;
+      $target->data = (object) ['ID' => -1, 'user_login' => 'adminino_role_preview', 'display_name' => self::role_label($sc['role'])];
+      $target->caps = [$sc['role'] => true];
+      $target->get_role_caps();
+    }
+    $admin = wp_get_current_user();
+    $level = ob_get_level();
+    $failed = false;
+    self::$scope_menu = true;
+    try {
+      $GLOBALS['current_user'] = $target;
+      ob_start();
+      self::build_scope_menu();
+      ob_end_clean();
+    } catch (\Throwable $e) {
+      while (ob_get_level() > $level) { ob_end_clean(); }
+      $failed = true;
+    } finally {
+      $GLOBALS['current_user'] = $admin;
+    }
+    if ($failed) { self::$scope_menu = false; wp_send_json_error([], 500); }
+    $_GET['tab'] = 'left';
+    ob_start();
+    self::page();
+    $html = ob_get_clean();
+    self::$scope_menu = false;
+    wp_send_json_success(['html' => $html]);
+  }
+  private static function build_scope_menu() {
+    global $menu, $submenu, $admin_page_hooks, $_registered_pages, $_parent_pages,
+      $_wp_real_parent_file, $_wp_menu_nopriv, $_wp_submenu_nopriv,
+      $_wp_last_object_menu, $_wp_last_utility_menu, $menu_order, $default_menu_order;
+    $menu = []; $submenu = [];
+    require ABSPATH . 'wp-admin/menu.php';
+    self::$orig = ['menu' => $menu, 'submenu' => $submenu];
+  }
+  private static function scope_menu_loader($sc) {
+    $url = add_query_arg(['action' => 'mk_ame_scope_menu', 'role' => $sc['role'], 'user' => $sc['user'], '_wpnonce' => wp_create_nonce('mk_ame_scope_menu')], admin_url('admin-post.php'));
+    $loading = self::lang() === 'nl' ? 'Menu voor deze rol laden…' : 'Loading the menu for this role…';
+    $error = self::lang() === 'nl' ? 'Het menu kon niet worden geladen.' : 'The menu could not be loaded.';
+    $retry = self::lang() === 'nl' ? 'Opnieuw laden' : 'Reload menu';
+    return self::scope_css() . self::scope_bar($sc)
+      . '<div class=~amx-menu-loading~ aria-busy=~true~><p role=~status~>' . esc_html($loading) . '</p><button type=~button~ class=~button~ hidden>' . esc_html($retry) . '</button></div>'
+      . '<script>(function(){var root=document.currentScript.closest(~.wrap.ame~),box=root.querySelector(~.amx-menu-loading~),button=box.querySelector(~button~);function load(){box.setAttribute(~aria-busy~,~true~);button.hidden=true;fetch(' . wp_json_encode($url) . ',{credentials:~same-origin~}).then(function(r){if(!r.ok)throw new Error();return r.json();}).then(function(r){if(!root.isConnected)return;if(!r.success||!r.data||!r.data.html)throw new Error();var d=new DOMParser().parseFromString(r.data.html,~text/html~),next=d.querySelector(~.wrap.ame~);if(!next)throw new Error();next=document.importNode(next,true);root.replaceWith(next);next.querySelectorAll(~script~).forEach(function(old){var s=document.createElement(~script~);s.text=old.text;old.replaceWith(s);});}).catch(function(){if(!root.isConnected)return;box.setAttribute(~aria-busy~,~false~);box.querySelector(~p~).textContent=' . wp_json_encode($error) . ';button.hidden=false;});}button.addEventListener(~click~,load);load();})();</script>';
   }
   public static function scope_action() {
     if (!current_user_can('manage_options')) { wp_die(self::t('Access denied.')); }
@@ -324,6 +389,7 @@ final class MK_Admin_Menu {
   // ---------- Left menu: apply ----------
   public static function apply() {
     global $menu, $submenu;
+    if (self::$scope_menu) { return; }
     $s = self::settings();
     if (!$s) { return; }
     $map = [];
@@ -367,6 +433,7 @@ final class MK_Admin_Menu {
   // WordPress removes a separator that sits right below another one. A duplicated separator is meant to give
   // extra space, so put those back in the place the editor shows them.
   public static function sep_back($menu) {
+    if (self::$scope_menu) { return $menu; }
     $s = self::settings();
     if (empty($s['top']) || !is_array($menu)) { return $menu; }
     $slugs = []; $hid = [];
@@ -389,10 +456,12 @@ final class MK_Admin_Menu {
     return $out;
   }
   public static function use_order($b) {
+    if (self::$scope_menu) { return $b; }
     $s = self::settings();
     return empty($s['top']) ? $b : true;
   }
   public static function order($o) {
+    if (self::$scope_menu) { return $o; }
     $s = self::settings();
     if (empty($s['top'])) { return $o; }
     $res = [];
@@ -558,10 +627,25 @@ final class MK_Admin_Menu {
     }
     $sc = self::scope_req();
     if (!self::scope_default($sc) && self::scope_own($sc) === null) { self::scope_back($sc, 'saved'); }
+    // Items outside this role/user's current permissions are absent from the editor.
+    // Keep their saved choices in case permissions or active plugins change later.
+    if (!self::scope_default($sc)) { $out = self::keep_unlisted_settings($out, (array) self::scope_own($sc)); }
     // Icon choices from the picker hold for every role and user.
     if (isset($_POST['icon']) && is_array($_POST['icon'])) { MK_AME_Look::save_map(wp_unslash($_POST['icon'])); }
     self::scope_set($sc, $out);
     self::scope_back($sc, 'saved');
+  }
+  private static function keep_unlisted_settings($out, $old) {
+    $present = array_column($out['top'], 'slug');
+    foreach (isset($old['top']) ? $old['top'] : [] as $row) {
+      if (!in_array($row['slug'], $present, true) && strpos($row['slug'], 'separator') !== 0) { $out['top'][] = $row; }
+    }
+    foreach (isset($old['sub']) ? $old['sub'] : [] as $parent => $rows) {
+      if (!isset($out['sub'][$parent])) { $out['sub'][$parent] = $rows; continue; }
+      $present = array_column($out['sub'][$parent], 'slug');
+      foreach ($rows as $row) { if (!in_array($row['slug'], $present, true)) { $out['sub'][$parent][] = $row; } }
+    }
+    return $out;
   }
   public static function reset() {
     if (!current_user_can('manage_options')) { wp_die(self::t('Access denied.')); }
@@ -821,8 +905,9 @@ final class MK_Admin_Menu {
 
   private static function tab_left() {
     global $menu, $submenu;
-    $o = self::$orig ? self::$orig : ['menu' => $menu, 'submenu' => $submenu];
     $sc = self::scope_req();
+    if (!self::scope_default($sc) && !self::$scope_menu) { return self::scope_menu_loader($sc); }
+    $o = self::$orig ? self::$orig : ['menu' => $menu, 'submenu' => $submenu];
     $s = self::scope_effective($sc);
     $tops = $o['menu'];
     ksort($tops, SORT_NUMERIC);
@@ -1052,5 +1137,5 @@ add_filter('plugin_action_links_' . plugin_basename(__FILE__), function ($links)
   return $links;
 });
 require_once __DIR__ . '/includes/updater.php';
-new MK_GitHub_Updater(__FILE__, 'rinothecoder/wp-admin-manager');
+new MK_GitHub_Updater(__FILE__, 'rinothecoder/adminino');
 }
