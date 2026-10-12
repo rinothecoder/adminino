@@ -108,7 +108,9 @@ final class MK_GitHub_Updater {
       || $version[1] !== ($offered->new_version ?? '')) {
       return new WP_Error('mk_gh_version', 'The downloaded Adminino plugin does not match the published release.');
     }
-    foreach (['includes/design.php', 'includes/look.php', 'includes/extras.php', 'includes/ordering.php', 'includes/help.php', 'includes/updater.php', 'languages/nl.php', 'assets/lucide.json', 'assets/adminino-icon.svg', 'assets/adminino-sidebar.svg'] as $required) {
+    $required_files = ['includes/design.php', 'includes/look.php', 'includes/extras.php', 'includes/ordering.php', 'includes/help.php', 'includes/updater.php', 'languages/nl.php', 'assets/lucide.json', 'assets/adminino-icon.svg', 'assets/adminino-sidebar.svg'];
+    if (version_compare($version[1], '1.3.5', '>=')) { $required_files[] = 'includes/abilities.php'; }
+    foreach ($required_files as $required) {
       if (!$wp_filesystem->is_file(trailingslashit($source) . $required)) {
         return new WP_Error('mk_gh_incomplete', 'The published Adminino release is missing required files.');
       }

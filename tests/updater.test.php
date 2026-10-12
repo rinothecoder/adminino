@@ -60,6 +60,13 @@ $GLOBALS['wp_filesystem']->files[$source.'admin-menu-manager.php']="<?php\n/**\n
 foreach(['includes/design.php','includes/look.php','includes/extras.php','includes/ordering.php','includes/help.php','includes/updater.php','languages/nl.php','assets/lucide.json','assets/adminino-icon.svg','assets/adminino-sidebar.svg'] as $f)$GLOBALS['wp_filesystem']->files[$source.$f]='runtime';
 expect($u->fix_dir($source,'',null,['plugin'=>'other/other.php'])===$source,'Other extracted plugin untouched');
 expect($u->fix_dir($source,'',null,['plugin'=>'admin-menu-manager/admin-menu-manager.php'])==='/tmp/admin-menu-manager/','Installed plugin directory preserved');
+$GLOBALS['wp_filesystem']->files[$source.'admin-menu-manager.php']=str_replace('1.3.3','1.3.5',$GLOBALS['wp_filesystem']->files[$source.'admin-menu-manager.php']);
+$offer->new_version='1.3.5';
+expect(is_wp_error($u->fix_dir($source,'',null,['plugin'=>'admin-menu-manager/admin-menu-manager.php'])),'Abilities release requires its runtime file');
+$GLOBALS['wp_filesystem']->files[$source.'includes/abilities.php']='runtime';
+expect($u->fix_dir($source,'',null,['plugin'=>'admin-menu-manager/admin-menu-manager.php'])==='/tmp/admin-menu-manager/','Complete abilities release accepted');
+$GLOBALS['wp_filesystem']->files[$source.'admin-menu-manager.php']=str_replace('1.3.5','1.3.3',$GLOBALS['wp_filesystem']->files[$source.'admin-menu-manager.php']);
+$offer->new_version='1.3.3';
 $GLOBALS['wp_filesystem']->files[$source.'admin-menu-manager.php']=str_replace('1.3.3','1.3.2',$GLOBALS['wp_filesystem']->files[$source.'admin-menu-manager.php']);
 expect(is_wp_error($u->fix_dir($source,'',null,['plugin'=>'admin-menu-manager/admin-menu-manager.php'])),'Archive version mismatch rejected');
 $GLOBALS['wp_filesystem']->files[$source.'admin-menu-manager.php']=str_replace('1.3.2','1.3.3',$GLOBALS['wp_filesystem']->files[$source.'admin-menu-manager.php']);

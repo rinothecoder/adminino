@@ -25,6 +25,18 @@ Both admin bar editors can be set per role. Role previews build the native WordP
 - Export / import settings between sites (logos excluded)
 - English and Dutch interface, picked from the site language
 
+## AI / MCP abilities
+
+Adminino registers three optional WordPress abilities when the Abilities API is available (WordPress 6.9+). An existing MCP adapter, such as Novamira, can expose them; Adminino adds no separate MCP server. Every ability requires `manage_options`.
+
+- `adminino/get-settings`: read effective settings, inheritance and a revision.
+- `adminino/list-items`: discover native item IDs and parents for the selected scope.
+- `adminino/update-settings`: preview or apply specific hide/show and label changes, preserving all other choices.
+
+Supported sections are `left_menu` (role or user), `admin_bar` (role, `admin` or `front` context), and `dashboard` (global). Dashboard widgets can be shown/hidden and the hiding feature enabled; their titles stay owned by their plugins. Shared custom links can be shown/hidden, but are renamed in the UI. Reordering, custom link creation/deletion, permissions and branding settings are outside this first integration.
+
+Call `list-items` first, then preview `update-settings` (defaults to `dry_run: true`). To apply, pass `dry_run: false` and the preview's `revision` as `expected_revision`. Stale settings, unknown IDs and unsupported scopes are refused before writing. Native discovery uses a single-use internal read request, so the site must allow loopback HTTP requests. Frontend bar discovery uses the homepage.
+
 ## Languages
 
 The interface is Dutch when the WordPress locale starts with `nl`, otherwise English. Dutch strings live in `languages/nl.php`.
@@ -85,4 +97,4 @@ Rino de Boer
 
 ## Latest release
 
-1.3.4 builds both admin bar previews from the selected role's native WordPress menu, restores live hide/show updates in those previews, and automatically discovers new plugin dashboard widgets. Settings for temporarily unavailable menu items and existing plugin data are preserved. Updates use the public `rinothecoder/adminino` repository without a token.
+1.3.5 adds three optional WordPress/MCP abilities for reading, discovering and patching navigation and dashboard settings. Reviewed changes preserve other settings, respect role/user inheritance and require administrator access. Existing menu previews and automatic dashboard widget discovery remain available to people using the interface.

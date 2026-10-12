@@ -109,7 +109,7 @@ final class MK_AME_Extras {
     self::dash_seen();
     if (self::settings()['dash']['on']) { self::dash_hide(); }
   }
-  private static function dashboard_widgets() {
+  public static function dashboard_widgets() {
     $widgets = ['welcome' => 'Welcome'] + self::core_widgets();
     $seen = get_option(self::SEEN, []);
     if (is_array($seen)) {
@@ -124,6 +124,12 @@ final class MK_AME_Extras {
     if (!current_user_can('manage_options')) { wp_die(self::t('Access denied.')); }
     check_admin_referer('mk_ame_dash_widgets');
     wp_send_json_success(['widgets' => self::dashboard_widgets(), 'hidden' => self::settings()['dash']['hide']]);
+  }
+  public static function save_dashboard($config) {
+    $s = get_option(self::OPT, []);
+    $s = is_array($s) ? $s : [];
+    $s['dash'] = ['on' => !empty($config['on']) ? 1 : 0, 'hide' => array_values(array_unique(array_map('sanitize_key', $config['hide'])))];
+    update_option(self::OPT, $s);
   }
   public static function welcome_css() {
     echo '<style>#welcome-panel{display:none!important}</style>';
@@ -229,9 +235,9 @@ final class MK_AME_Extras {
         }
         break;
       case 'dash':
-        $s['dash']['on'] = $on('dash_on');
-        $s['dash']['hide'] = isset($p['hide']) ? array_values(array_map('sanitize_key', (array) $p['hide'])) : [];
-        break;
+        self::save_dashboard(['on' => $on('dash_on'), 'hide' => isset($p['hide']) ? (array) $p['hide'] : []]);
+        self::back($sec, 'saved');
+        return;
       case 'notices':
         $s['notices']['on'] = $on('notices_on');
         break;

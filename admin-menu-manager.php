@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Adminino
  * Description: Controls the WordPress admin: order, names and visibility of the left menu and the admin bar, a custom color scheme, your logos in the menu and on the login page, and drag and drop post ordering. Settings under Settings > Adminino.
- * Version: 1.3.4
+ * Version: 1.3.5
  * Author: Rino de Boer
  * Requires PHP: 7.4
  * Update URI: https://github.com/rinothecoder/adminino
@@ -176,11 +176,32 @@ final class MK_Admin_Menu {
     $tab = isset($_REQUEST['tab']) ? sanitize_key($_REQUEST['tab']) : 'left';
     if (!in_array($tab, ['left', 'top', 'topfront'], true)) { wp_send_json_error([], 400); }
     if ($tab !== 'left') { $sc['user'] = 0; }
-    $target = $sc['user'] ? get_userdata($sc['user']) : null;
+    self::$scope_menu = true;
+    try {
+      self::as_scope($sc, function () use ($tab, $sc) {
+        self::build_scope_menu();
+        if ($tab !== 'left') {
+          self::$scope_links = self::menu_link_suggestions();
+          self::$scope_nodes = self::bar_nodes($tab === 'topfront' ? 'front' : 'admin', $sc['role']);
+        }
+      });
+    } catch (\Throwable $e) {
+      self::$scope_menu = false;
+      wp_send_json_error([], 500);
+    }
+    $_GET['tab'] = $tab;
+    ob_start();
+    self::page();
+    $html = ob_get_clean();
+    self::$scope_menu = false;
+    wp_send_json_success(['html' => $html]);
+  }
+  private static function as_scope($sc, $callback) {
+    $target = self::scope_default($sc) ? wp_get_current_user() : ($sc['user'] ? get_userdata($sc['user']) : null);
     $virtual = !$target;
     if (!$target) {
       $role = get_role($sc['role']);
-      if (!$role) { wp_send_json_error([], 400); }
+      if (!$role) { throw new InvalidArgumentException('Unknown role.'); }
       $target = new WP_User();
       // Give WordPress a temporary site member, without creating a user or borrowing
       // an administrator's individual rights or Multisite super-admin identity.
@@ -206,31 +227,15 @@ final class MK_Admin_Menu {
     }
     $admin = wp_get_current_user();
     $level = ob_get_level();
-    $failed = false;
-    self::$scope_menu = true;
     try {
       $GLOBALS['current_user'] = $target;
       ob_start();
-      self::build_scope_menu();
-      if ($tab !== 'left') {
-        self::$scope_links = self::menu_link_suggestions();
-        self::$scope_nodes = self::bar_nodes($tab === 'topfront' ? 'front' : 'admin', $sc['role']);
-      }
-      ob_end_clean();
-    } catch (\Throwable $e) {
-      while (ob_get_level() > $level) { ob_end_clean(); }
-      $failed = true;
+      return $callback();
     } finally {
+      while (ob_get_level() > $level) { ob_end_clean(); }
       $GLOBALS['current_user'] = $admin;
       if ($virtual) { remove_filter('get_user_metadata', $metadata, 10); wp_cache_delete($target->ID, 'users'); }
     }
-    if ($failed) { self::$scope_menu = false; wp_send_json_error([], 500); }
-    $_GET['tab'] = $tab;
-    ob_start();
-    self::page();
-    $html = ob_get_clean();
-    self::$scope_menu = false;
-    wp_send_json_success(['html' => $html]);
   }
   private static function build_scope_menu() {
     global $menu, $submenu, $admin_page_hooks, $_registered_pages, $_parent_pages,
@@ -239,6 +244,69 @@ final class MK_Admin_Menu {
     $menu = []; $submenu = [];
     require ABSPATH . 'wp-admin/menu.php';
     self::$orig = ['menu' => $menu, 'submenu' => $submenu];
+  }
+  // The UI and abilities share scope resolution, native inventories and option writers.
+  public static function automation_settings($sc, $section, $ctx) {
+    $source = ['type' => 'default', 'role' => 'all', 'user_id' => 0];
+    if ($section === 'dashboard') {
+      $config = MK_AME_Extras::settings()['dash']; $own = true;
+    } elseif ($section === 'admin_bar') {
+      $roles = self::bar_roles();
+      $own = $sc['role'] === 'all' || isset($roles[$ctx][$sc['role']]);
+      $config = self::bar_cfg($ctx, $sc['role']) + ['lists' => []];
+      if ($sc['role'] !== 'all' && $own) { $source = ['type' => 'role', 'role' => $sc['role'], 'user_id' => 0]; }
+    } else {
+      $own = self::scope_default($sc) || self::scope_own($sc) !== null;
+      $config = self::scope_effective($sc) + ['top' => [], 'sub' => []];
+      if (!self::scope_default($sc) && $own) { $source = ['type' => $sc['user'] ? 'user' : 'role', 'role' => $sc['role'], 'user_id' => $sc['user']]; }
+      elseif ($sc['user']) {
+        $roles = self::scopes()['roles']; $user = get_userdata($sc['user']);
+        foreach ((array) $user->roles as $role) {
+          if (isset($roles[$role])) { $source = ['type' => 'role', 'role' => $role, 'user_id' => 0]; break; }
+        }
+      }
+    }
+    return ['section' => $section, 'scope' => ['role' => $sc['role'], 'user_id' => $sc['user'], 'context' => $ctx], 'has_own_settings' => $own, 'source' => $source, 'config' => $config];
+  }
+  public static function automation_save($sc, $section, $ctx, $config) {
+    if ($section === 'dashboard') { MK_AME_Extras::save_dashboard($config); }
+    elseif ($section === 'admin_bar') { self::bar_set($ctx, $sc['role'], $config); }
+    else { self::scope_set($sc, $config); }
+  }
+  public static function automation_inventory($sc, $section, $ctx) {
+    $scope = self::$scope_menu; $orig = self::$orig;
+    self::$scope_menu = true;
+    try {
+      return self::as_scope($sc, function () use ($section, $ctx, $sc) {
+        $items = [];
+        if ($section === 'dashboard') {
+          require_once ABSPATH . 'wp-admin/includes/dashboard.php';
+          $GLOBALS['current_screen'] = WP_Screen::get('dashboard');
+          wp_dashboard_setup();
+          do_action('admin_head-index.php');
+          foreach (MK_AME_Extras::dashboard_widgets() as $id => $label) {
+            $items[] = ['id' => $id, 'parent' => '', 'label' => $label, 'kind' => 'widget', 'can_hide' => true, 'can_rename' => false];
+          }
+        } elseif ($section === 'admin_bar') {
+          foreach (self::bar_nodes($ctx, $sc['role']) as $id => $node) {
+            $group = !empty($node['g']); $custom = strpos($id, 'mk-ame-link-') === 0;
+            $items[] = ['id' => $id, 'parent' => $node['p'], 'label' => $node['t'], 'kind' => $group ? 'group' : ($custom ? 'custom_link' : 'item'), 'can_hide' => !$group && !self::locked($id), 'can_rename' => !$group && !$custom];
+          }
+        } else {
+          self::build_scope_menu();
+          foreach ((array) self::$orig['menu'] as $row) {
+            $sep = strpos((string) $row[2], 'separator') === 0;
+            $items[] = ['id' => (string) $row[2], 'parent' => '', 'label' => self::plain($row[0]), 'kind' => $sep ? 'separator' : 'item', 'can_hide' => !self::locked($row[2]), 'can_rename' => !$sep];
+          }
+          foreach ((array) self::$orig['submenu'] as $parent => $rows) {
+            foreach ($rows as $row) {
+              $items[] = ['id' => (string) $row[2], 'parent' => (string) $parent, 'label' => self::plain($row[0]), 'kind' => 'item', 'can_hide' => !self::locked($row[2]), 'can_rename' => true];
+            }
+          }
+        }
+        return $items;
+      });
+    } finally { self::$scope_menu = $scope; self::$orig = $orig; }
   }
   private static function scope_menu_loader($sc, $tab = 'left') {
     $url = add_query_arg(['action' => 'mk_ame_scope_menu', 'tab' => $tab, 'role' => $sc['role'], 'user' => $sc['user'], '_wpnonce' => wp_create_nonce('mk_ame_scope_menu')], admin_url('admin-post.php'));
@@ -732,8 +800,7 @@ final class MK_Admin_Menu {
     $role = self::bar_role_req();
     foreach ($old as $id => $cl) { if (!isset($touched[$id])) { $cus[] = $cl; } }
     $out = self::keep_unlisted_bar_settings($out, self::bar_cfg($ctx, $role), $touched);
-    if ($role !== 'all') { $rr = self::bar_roles(); $rr[$ctx][$role] = $out; update_option(self::BARR, $rr); }
-    else { update_option($ctx === 'front' ? self::BARF : self::BAR, $out); }
+    self::bar_set($ctx, $role, $out);
     update_option(self::CUS, $cus);
     self::bar_back($ctx, $role, 'saved');
   }
@@ -770,6 +837,10 @@ final class MK_Admin_Menu {
     if ($role !== 'all') { $r = self::bar_roles(); if (isset($r[$ctx][$role]) && is_array($r[$ctx][$role])) { return $r[$ctx][$role]; } }
     $s = get_option($ctx === 'front' ? self::BARF : self::BAR, []);
     return is_array($s) ? $s : [];
+  }
+  private static function bar_set($ctx, $role, $config) {
+    if ($role !== 'all') { $rr = self::bar_roles(); $rr[$ctx][$role] = $config; update_option(self::BARR, $rr); }
+    else { update_option($ctx === 'front' ? self::BARF : self::BAR, $config); }
   }
   private static function bar_for_user($ctx) {
     $u = wp_get_current_user();
@@ -1239,4 +1310,6 @@ add_filter('plugin_action_links_' . plugin_basename(__FILE__), function ($links)
 });
 require_once __DIR__ . '/includes/updater.php';
 new MK_GitHub_Updater(__FILE__, 'rinothecoder/adminino');
+require_once __DIR__ . '/includes/abilities.php';
+MK_AME_Abilities::init();
 }
