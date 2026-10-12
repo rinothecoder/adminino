@@ -19,7 +19,7 @@ Both admin bar editors can be set per role. Role previews build the native WordP
 - **Logos:** a white logo at the top of the left menu and a dark logo on the login page, each with a width slider and a live preview
 - **Post ordering:** drag and drop posts, pages and custom post types into your own order on their admin lists. All post types by default, or pick specific ones. The order is used on the website too, unless "Only in admin" is ticked. Stored in WordPress's own `menu_order` field
 - Side panel with an Overview. Everything new is off by default and loads nothing until switched on
-- Admin footer text, dashboard widget clean-up, notices bundled in one collapsible box
+- Admin footer text, dashboard widget clean-up with automatic plugin widget discovery, notices bundled in one collapsible box
 - Duplicate link for posts and pages
 - SVG uploads (script checked, you choose which user roles may upload)
 - Export / import settings between sites (logos excluded)

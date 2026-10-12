@@ -21,6 +21,10 @@ final class MK_AME_Extras {
     add_action('admin_post_mk_ame_export', [__CLASS__, 'export']);
     add_action('admin_post_mk_ame_import', [__CLASS__, 'import']);
     add_action('admin_action_mk_ame_dup', [__CLASS__, 'dup']);
+    add_action('admin_post_mk_ame_dash_widgets', [__CLASS__, 'dash_widgets']);
+    // Discovery also runs when hiding is off; collect late registrations before hiding.
+    add_action('wp_dashboard_setup', [__CLASS__, 'dash_seen'], PHP_INT_MAX);
+    add_action('admin_head-index.php', [__CLASS__, 'dash_prepare'], PHP_INT_MAX);
 
     $s = self::settings();
 
@@ -29,8 +33,6 @@ final class MK_AME_Extras {
       if (!$s['footer']['ver']) { add_filter('update_footer', '__return_empty_string', 99); }
     }
     if ($s['dash']['on']) {
-      add_action('wp_dashboard_setup', [__CLASS__, 'dash_seen'], 998);
-      add_action('wp_dashboard_setup', [__CLASS__, 'dash_hide'], 999);
       if (in_array('welcome', $s['dash']['hide'], true)) { add_action('admin_head-index.php', [__CLASS__, 'welcome_css']); }
     }
     if ($s['notices']['on']) {
@@ -102,6 +104,26 @@ final class MK_AME_Extras {
       if ($id === 'welcome') { continue; }
       foreach (['normal', 'side', 'column3', 'column4'] as $ctx) { remove_meta_box($id, 'dashboard', $ctx); }
     }
+  }
+  public static function dash_prepare() {
+    self::dash_seen();
+    if (self::settings()['dash']['on']) { self::dash_hide(); }
+  }
+  private static function dashboard_widgets() {
+    $widgets = ['welcome' => 'Welcome'] + self::core_widgets();
+    $seen = get_option(self::SEEN, []);
+    if (is_array($seen)) {
+      foreach ($seen as $id => $title) { if (!isset($widgets[$id]) && is_string($title) && $title !== '') { $widgets[$id] = $title; } }
+    }
+    foreach ($widgets as $id => $title) {
+      if (isset(self::core_widgets()[$id]) || $id === 'welcome') { $widgets[$id] = self::t($title); }
+    }
+    return $widgets;
+  }
+  public static function dash_widgets() {
+    if (!current_user_can('manage_options')) { wp_die(self::t('Access denied.')); }
+    check_admin_referer('mk_ame_dash_widgets');
+    wp_send_json_success(['widgets' => self::dashboard_widgets(), 'hidden' => self::settings()['dash']['hide']]);
   }
   public static function welcome_css() {
     echo '<style>#welcome-panel{display:none!important}</style>';
@@ -733,22 +755,20 @@ CSS;
 
   private static function tab_dash() {
     $s = self::settings();
-    $widgets = ['welcome' => 'Welcome'] + self::core_widgets();
-    $seen = get_option(self::SEEN, []);
-    if (is_array($seen)) {
-      foreach ($seen as $id => $title) { if (!isset($widgets[$id]) && $title !== '') { $widgets[$id] = $title; } }
-    }
+    $widgets = self::dashboard_widgets();
     $h = self::head('Dashboard', 'Hide the dashboard widgets your clients do not need. Things are only hidden, nothing is deleted.');
     $h .= self::form_open('dash');
     $h .= '<div class="amx-sec"><div class="amx-sec-h"><div><b>' . esc_html(self::t('Dashboard widgets')) . '</b><span>' . esc_html(self::t('Choose which widgets are hidden.')) . '</span></div>' . self::toggle('dash_on', $s['dash']['on']) . '</div><div class="amx-sec-b"><div class="amx-chk">';
     foreach ($widgets as $id => $title) {
-      $label = isset(self::core_widgets()[$id]) || $id === 'welcome' ? self::t($title) : $title;
+      $label = $title;
       $h .= '<label><input type="checkbox" name="hide[]" value="' . esc_attr($id) . '"' . ($s['dash']['on'] && in_array($id, $s['dash']['hide'], true) ? ' checked' : '') . ($s['dash']['on'] ? '' : ' disabled') . '> ' . esc_html($label) . '</label>';
     }
-    $h .= '</div><div class="amx-hint" style="margin-top:10px">' . esc_html(self::t('Widgets from plugins show up here after you have opened the dashboard once.')) . '</div></div></div>';
+    $h .= '</div><div class="amx-hint amx-dash-status" style="margin-top:10px" aria-live="polite"><span>' . esc_html(self::t('Checking for new dashboard widgets…')) . '</span> <button type="button" class="button-link" hidden>' . esc_html(self::t('Check again')) . '</button></div></div></div>';
     $h .= self::form_close();
     // Off: nothing is hidden, so every box is empty and greyed out. Switching on ticks all of them.
-    $h .= '<script>(function(){var t=document.querySelector("input[name=dash_on]");if(!t)return;var b=document.querySelectorAll("input[name=\\"hide[]\\"]");function sync(c){for(var i=0;i<b.length;i++){b[i].disabled=!c;b[i].parentNode.style.opacity=c?"":".5";}}t.addEventListener("change",function(){for(var i=0;i<b.length;i++){b[i].checked=t.checked;}sync(t.checked);});sync(t.checked);})();</script>';
+    $dashboard = wp_json_encode(admin_url('index.php'));
+    $inventory = wp_json_encode(add_query_arg(['action' => 'mk_ame_dash_widgets', '_wpnonce' => wp_create_nonce('mk_ame_dash_widgets')], admin_url('admin-post.php')));
+    $h .= '<script>(function(){var root=document.currentScript.closest(".wrap.ame"),t=root.querySelector("input[name=dash_on]");if(!t)return;var box=t.closest("form").querySelector(".amx-chk"),status=root.querySelector(".amx-dash-status"),msg=status.querySelector("span"),retry=status.querySelector("button");function boxes(){return box.querySelectorAll("input[type=checkbox]");}function sync(){boxes().forEach(function(b){b.disabled=!t.checked;b.parentNode.style.opacity=t.checked?"":".5";});}t.addEventListener("change",function(){boxes().forEach(function(b){b.checked=t.checked;});sync();});sync();function refresh(){retry.hidden=true;msg.textContent=' . wp_json_encode(self::t('Checking for new dashboard widgets…')) . ';fetch(' . $dashboard . ',{credentials:"same-origin",cache:"no-store"}).then(function(r){if(!r.ok)throw new Error();return r.text();}).then(function(html){if(!new DOMParser().parseFromString(html,"text/html").getElementById("dashboard-widgets"))throw new Error();return fetch(' . $inventory . ',{credentials:"same-origin",cache:"no-store"});}).then(function(r){if(!r.ok)throw new Error();return r.json();}).then(function(r){if(!root.isConnected)return;if(!r.success||!r.data||!r.data.widgets)throw new Error();var known={};boxes().forEach(function(b){known[b.value]=true;});Object.keys(r.data.widgets).forEach(function(id){if(known[id])return;var label=document.createElement("label"),cb=document.createElement("input");cb.type="checkbox";cb.name="hide[]";cb.value=id;cb.checked=t.checked&&r.data.hidden.indexOf(id)!==-1;label.appendChild(cb);label.appendChild(document.createTextNode(" "+r.data.widgets[id]));box.appendChild(label);});sync();msg.textContent=' . wp_json_encode(self::t('Dashboard widgets are checked automatically when you open these settings.')) . ';}).catch(function(){if(!root.isConnected)return;msg.textContent=' . wp_json_encode(self::t('Dashboard widgets could not be checked.')) . ';retry.hidden=false;});}retry.addEventListener("click",refresh);refresh();})();</script>';
     return $h;
   }
 
