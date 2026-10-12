@@ -29,6 +29,8 @@ final class MK_Admin_Menu {
   const SCOPES = 'mk_ame_menu_scopes';
   private static $orig = null;
   private static $scope_menu = false;
+  private static $scope_nodes = null;
+  private static $scope_links = null;
   private static $gb = []; private static $sim = false;
   private static $barctx = 'admin'; private static $barico = false;
 
@@ -128,6 +130,13 @@ final class MK_Admin_Menu {
     }
     return self::raw(self::OPT);
   }
+  private static function scope_parent_role($sc) {
+    if ($sc['user']) {
+      $s = self::scopes(); $u = get_userdata($sc['user']);
+      if ($u) { foreach ((array) $u->roles as $role) { if (isset($s['roles'][$role])) { return $role; } } }
+    }
+    return $sc['role'];
+  }
   private static function scope_effective($sc) {
     $o = self::scope_own($sc);
     return $o !== null ? $o : self::scope_parent($sc);
@@ -164,17 +173,36 @@ final class MK_Admin_Menu {
     check_admin_referer('mk_ame_scope_menu');
     $sc = self::scope_req();
     if (self::scope_default($sc)) { wp_send_json_error([], 400); }
+    $tab = isset($_REQUEST['tab']) ? sanitize_key($_REQUEST['tab']) : 'left';
+    if (!in_array($tab, ['left', 'top', 'topfront'], true)) { wp_send_json_error([], 400); }
+    if ($tab !== 'left') { $sc['user'] = 0; }
     $target = $sc['user'] ? get_userdata($sc['user']) : null;
+    $virtual = !$target;
     if (!$target) {
       $role = get_role($sc['role']);
       if (!$role) { wp_send_json_error([], 400); }
       $target = new WP_User();
-      // A non-persisted identity prevents role previews from inheriting an administrator's
-      // individual capabilities or Multisite super-admin status (including the ID 0 fallback).
-      $target->ID = -1;
-      $target->data = (object) ['ID' => -1, 'user_login' => 'adminino_role_preview', 'display_name' => self::role_label($sc['role'])];
+      // Give WordPress a temporary site member, without creating a user or borrowing
+      // an administrator's individual rights or Multisite super-admin identity.
+      do { $id = PHP_INT_MAX - random_int(1, 1000000000); } while (get_userdata($id));
+      $target->ID = $id;
+      $target->data = (object) ['ID' => $id, 'user_login' => '__adminino_preview_' . $id, 'user_nicename' => '', 'user_email' => '', 'user_url' => '', 'user_registered' => '', 'user_status' => 0, 'display_name' => self::role_label($sc['role'])];
       $target->caps = [$sc['role'] => true];
-      $target->get_role_caps();
+      global $wpdb;
+      $target->cap_key = $wpdb->get_blog_prefix() . 'capabilities';
+    }
+    $metadata = function ($value, $id, $key) use ($target) {
+      if ((int) $id !== $target->ID) { return $value; }
+      if ($key === $target->cap_key) { return [$target->caps]; }
+      if ($key === '') { return [$target->cap_key => [maybe_serialize($target->caps)]]; }
+      if ($key === 'primary_blog') { return [get_current_blog_id()]; }
+      if ($key === 'show_admin_bar_front') { return ['true']; }
+      return [''];
+    };
+    if ($virtual) {
+      wp_cache_set($target->ID, $target->data, 'users', 60);
+      add_filter('get_user_metadata', $metadata, 10, 3);
+      $target->for_site();
     }
     $admin = wp_get_current_user();
     $level = ob_get_level();
@@ -184,15 +212,20 @@ final class MK_Admin_Menu {
       $GLOBALS['current_user'] = $target;
       ob_start();
       self::build_scope_menu();
+      if ($tab !== 'left') {
+        self::$scope_links = self::menu_link_suggestions();
+        self::$scope_nodes = self::bar_nodes($tab === 'topfront' ? 'front' : 'admin', $sc['role']);
+      }
       ob_end_clean();
     } catch (\Throwable $e) {
       while (ob_get_level() > $level) { ob_end_clean(); }
       $failed = true;
     } finally {
       $GLOBALS['current_user'] = $admin;
+      if ($virtual) { remove_filter('get_user_metadata', $metadata, 10); wp_cache_delete($target->ID, 'users'); }
     }
     if ($failed) { self::$scope_menu = false; wp_send_json_error([], 500); }
-    $_GET['tab'] = 'left';
+    $_GET['tab'] = $tab;
     ob_start();
     self::page();
     $html = ob_get_clean();
@@ -207,12 +240,13 @@ final class MK_Admin_Menu {
     require ABSPATH . 'wp-admin/menu.php';
     self::$orig = ['menu' => $menu, 'submenu' => $submenu];
   }
-  private static function scope_menu_loader($sc) {
-    $url = add_query_arg(['action' => 'mk_ame_scope_menu', 'role' => $sc['role'], 'user' => $sc['user'], '_wpnonce' => wp_create_nonce('mk_ame_scope_menu')], admin_url('admin-post.php'));
+  private static function scope_menu_loader($sc, $tab = 'left') {
+    $url = add_query_arg(['action' => 'mk_ame_scope_menu', 'tab' => $tab, 'role' => $sc['role'], 'user' => $sc['user'], '_wpnonce' => wp_create_nonce('mk_ame_scope_menu')], admin_url('admin-post.php'));
     $loading = self::lang() === 'nl' ? 'Menu voor deze rol laden…' : 'Loading the menu for this role…';
     $error = self::lang() === 'nl' ? 'Het menu kon niet worden geladen.' : 'The menu could not be loaded.';
     $retry = self::lang() === 'nl' ? 'Opnieuw laden' : 'Reload menu';
-    return self::scope_css() . self::scope_bar($sc)
+    $head = $tab === 'left' ? self::scope_bar($sc) : self::bar_heading($tab === 'topfront' ? 'front' : 'admin') . self::bar_scope($tab === 'topfront' ? 'front' : 'admin', $sc['role']);
+    return self::scope_css() . $head
       . '<div class=~amx-menu-loading~ aria-busy=~true~><p role=~status~>' . esc_html($loading) . '</p><button type=~button~ class=~button~ hidden>' . esc_html($retry) . '</button></div>'
       . '<script>(function(){var root=document.currentScript.closest(~.wrap.ame~),box=root.querySelector(~.amx-menu-loading~),button=box.querySelector(~button~);function load(){box.setAttribute(~aria-busy~,~true~);button.hidden=true;fetch(' . wp_json_encode($url) . ',{credentials:~same-origin~}).then(function(r){if(!r.ok)throw new Error();return r.json();}).then(function(r){if(!root.isConnected)return;if(!r.success||!r.data||!r.data.html)throw new Error();var d=new DOMParser().parseFromString(r.data.html,~text/html~),next=d.querySelector(~.wrap.ame~);if(!next)throw new Error();next=document.importNode(next,true);root.replaceWith(next);next.querySelectorAll(~script~).forEach(function(old){var s=document.createElement(~script~);s.text=old.text;old.replaceWith(s);});}).catch(function(){if(!root.isConnected)return;box.setAttribute(~aria-busy~,~false~);box.querySelector(~p~).textContent=' . wp_json_encode($error) . ';button.hidden=false;});}button.addEventListener(~click~,load);load();})();</script>';
   }
@@ -264,7 +298,7 @@ final class MK_Admin_Menu {
       return '<form method=~post~ action=~' . esc_url(admin_url('admin-post.php')) . '~ class=~amx-inl~><input type=~hidden~ name=~action~ value=~mk_ame_scope~><input type=~hidden~ name=~op~ value=~' . $op . '~>' . wp_nonce_field('mk_ame_scope', '_wpnonce', false, false) . $hid . $inner . '</form>';
     };
     $name = self::scope_label($sc);
-    $parent = $sc['user'] ? sprintf(self::t('the role %s'), self::role_label($sc['role'])) : self::t('the default menu');
+    $parent = $sc['user'] ? sprintf(self::t('the role %s'), self::role_label(self::scope_parent_role($sc))) : self::t('the default menu');
     // Copy from: everything that has its own settings, except the one being edited.
     $opts = [];
     if (!$def && self::raw(self::OPT)) { $opts['def'] = self::t('Default'); }
@@ -280,7 +314,7 @@ final class MK_Admin_Menu {
     if ($def) {
       $state = self::t('Everyone without their own settings sees this menu.');
     } elseif (!$own) {
-      $state = $sc['user'] ? sprintf(self::t('%1$s uses the menu of the role %2$s'), $name, self::role_label($sc['role'])) : sprintf(self::t('%s uses the default menu'), $name);
+      $state = $sc['user'] ? sprintf(self::t('%1$s uses the menu of the role %2$s'), $name, self::role_label(self::scope_parent_role($sc))) : sprintf(self::t('%s uses the default menu'), $name);
       $state .= '. ' . self::t('View only. Click Customize to change this menu.');
       $act = $form('customize', '<button type=~submit~ class=~button button-primary~>' . esc_html(sprintf(self::t('Customize for %s'), $name)) . '</button>');
     } else {
@@ -300,6 +334,7 @@ final class MK_Admin_Menu {
       . '.amx-pvs{background:#1d2327;border-radius:8px;padding:6px 0;color:#f0f0f1;min-height:80px}.amx-pvs div{display:flex;align-items:center;gap:10px;height:34px;padding:0 12px;font-size:14px}.amx-pvs i{width:16px;height:16px;border-radius:50%;background:#a7aaad;opacity:.8;flex:none}'
       . '.amx-pvs div.sub{height:28px;padding:0 12px 0 38px;font-size:13px;background:#2c3338;color:#c3c4c7}.amx-pvs div.sep{height:14px;padding:0}.amx-pvs div.cur{background:var(--wp-admin-theme-color,#2271b1);color:#fff}.amx-pvs div.cur i{background:#fff;opacity:1}.amx-pv p{color:#646970;font-size:12.5px;margin:8px 0 0}'
       . '.amx-lock .ame-list{opacity:.5;pointer-events:none}.amx-lock .ame-addp{display:none}'
+      . '.amx-menu-loading [hidden]{display:none!important}'
       . '@media(max-width:900px){.amx-sg{grid-template-columns:1fr}.amx-pv{position:static}}</style>';
   }
   private static function scope_preview($sc) {
@@ -522,6 +557,7 @@ final class MK_Admin_Menu {
   // ---------- Top bar: remember which items exist ----------
   public static function bar_seen() {
     global $wp_admin_bar;
+    if (self::$sim) { return; }
     if (!is_object($wp_admin_bar) || !current_user_can('manage_options')) { return; }
     $seen = get_option(self::SEEN, []);
     if (!is_array($seen)) { $seen = []; }
@@ -545,6 +581,7 @@ final class MK_Admin_Menu {
   // ---------- Top bar: apply ----------
   public static function bar_apply() {
     global $wp_admin_bar;
+    if (self::$sim) { return; }
     if (!is_object($wp_admin_bar)) { return; }
     $nodes = $wp_admin_bar->get_nodes();
     if (!$nodes) { return; }
@@ -663,9 +700,8 @@ final class MK_Admin_Menu {
     $out = ['lists' => []];
     $old = [];
     foreach (self::custom_links() as $cl) { $old[$cl['id']] = $cl; }
-    // Custom links of the other list stay as they are; the ones of this list are rebuilt from the form.
-    $cus = [];
-    foreach (self::custom_links() as $cl) { if ((isset($cl['where']) ? $cl['where'] : 'both') !== $ctx) { $cus[] = $cl; } }
+    // Rebuild edited custom links, while retaining links absent from this role's menu.
+    $cus = []; $touched = [];
     $seen = get_option(self::SEEN, []);
     foreach ($in as $g) {
       if (!is_array($g) || empty($g['rows']) || !is_array($g['rows'])) { continue; }
@@ -676,6 +712,7 @@ final class MK_Admin_Menu {
         $id = self::clean_slug(isset($r['slug']) ? $r['slug'] : '');
         if ($id === '') { continue; }
         if (!empty($r['custom'])) {
+          $touched[$id] = true;
           if (!empty($r['del'])) { continue; }
           $title = sanitize_text_field(isset($r['title']) ? $r['title'] : '');
           $url = trim(isset($r['url']) ? $r['url'] : '');
@@ -693,10 +730,22 @@ final class MK_Admin_Menu {
       }
     }
     $role = self::bar_role_req();
+    foreach ($old as $id => $cl) { if (!isset($touched[$id])) { $cus[] = $cl; } }
+    $out = self::keep_unlisted_bar_settings($out, self::bar_cfg($ctx, $role), $touched);
     if ($role !== 'all') { $rr = self::bar_roles(); $rr[$ctx][$role] = $out; update_option(self::BARR, $rr); }
     else { update_option($ctx === 'front' ? self::BARF : self::BAR, $out); }
     update_option(self::CUS, $cus);
     self::bar_back($ctx, $role, 'saved');
+  }
+  private static function keep_unlisted_bar_settings($out, $old, $deleted = []) {
+    foreach (isset($old['lists']) ? $old['lists'] : [] as $parent => $rows) {
+      if (!isset($out['lists'][$parent])) { $out['lists'][$parent] = []; }
+      $present = array_column($out['lists'][$parent], 'slug');
+      foreach ($rows as $row) {
+        if (!isset($deleted[$row['slug']]) && !in_array($row['slug'], $present, true)) { $out['lists'][$parent][] = $row; }
+      }
+    }
+    return $out;
   }
     public static function reset_bar() {
     if (!current_user_can('manage_options')) { wp_die(self::t('Access denied.')); }
@@ -784,7 +833,7 @@ final class MK_Admin_Menu {
     if (!is_user_logged_in()) { return; }
     foreach (self::custom_links() as $c) {
       $w = isset($c['where']) ? $c['where'] : 'both';
-      if (!self::$sim && (is_admin() ? $w === 'front' : $w === 'admin')) { continue; }
+      if (is_admin() ? $w === 'front' : $w === 'admin') { continue; }
       $meta = ['class' => 'mk-ame-custom'];
       if (!empty($c['blank'])) { $meta['target'] = '_blank'; }
       $bar->add_node(['id' => $c['id'], 'title' => esc_html($c['title']), 'href' => $c['url'], 'parent' => $c['parent'], 'meta' => $meta]);
@@ -975,34 +1024,84 @@ final class MK_Admin_Menu {
     return self::scope_css() . self::scope_bar($sc) . '<div class=~amx-sg~><div class=~' . ($locked ? 'amx-lock' : '') . '~>' . $msg . $form . '</div>' . self::scope_preview($sc) . '</div>' . ($lucide ? MK_AME_Look::picker_assets() : '') . self::sep_assets();
   }
 
-  // All known top bar items: simulated live, plus items seen earlier (including on the front end)
-  private static function bar_nodes() {
-    $seen = get_option(self::SEEN, []);
-    if (!is_array($seen)) { $seen = []; }
-    $mine = [];
-    foreach (self::custom_links() as $cl) { $mine[] = $cl['id']; }
-    $pruned = false;
-    foreach ($seen as $sid => $sr) { if (strpos($sid, 'mk-ame-link-') === 0 && !in_array($sid, $mine, true)) { unset($seen[$sid]); $pruned = true; } }
-    if ($pruned) { update_option(self::SEEN, $seen, false); }
-    $live = [];
-    try {
-      require_once ABSPATH . WPINC . '/class-wp-admin-bar.php';
-      $bar = new WP_Admin_Bar();
-      $bar->initialize();
-      $bar->add_menus();
-      self::$sim = true; do_action_ref_array('admin_bar_menu', [&$bar]); self::$sim = false;
-      foreach ((array) $bar->get_nodes() as $id => $n) {
-        if (!empty($n->group)) { $live[$id] = ['t' => '', 'p' => (string) $n->parent, 'g' => 1]; continue; }
-        $lb = self::bar_label($id, $n->title);
-        $live[$id] = ['t' => $lb[0], 'p' => (string) $n->parent] + ($lb[1] ? ['i' => 1] : []);
-      }
-    } catch (\Throwable $e) {}
-    foreach ($live as $id => $r) { if (strpos($id, 'mk-ame-link-') !== 0) { $live[$id]['a'] = 1; } }
-    foreach ($seen as $id => $r) {
-      if (!isset($live[$id])) { $live[$id] = $r; continue; }
-      foreach (['a', 'f', 'oa', 'of'] as $c) { if (!empty($r[$c])) { $live[$id][$c] = $r[$c]; } }
+  // Generate the native toolbar in the selected role and the actual admin/frontend context.
+  // Administrator history is useful in the shared editor, but is never a role's baseline.
+  private static function bar_nodes($ctx = 'admin', $role = 'all') {
+    $saved = [];
+    foreach (['wp_admin_bar', 'current_screen', 'wp_query', 'wp_the_query', 'post', '_SERVER'] as $key) {
+      $saved[$key] = ['exists' => array_key_exists($key, $GLOBALS), 'value' => isset($GLOBALS[$key]) ? $GLOBALS[$key] : null];
     }
-    return $live;
+    $sim = self::$sim; $level = ob_get_level();
+    try {
+      self::$sim = true;
+      $GLOBALS['current_screen'] = WP_Screen::get($ctx === 'front' ? 'front' : 'dashboard');
+      if ($ctx === 'front') {
+        $home = wp_parse_url(home_url('/'));
+        $_SERVER['HTTP_HOST'] = $home['host'] . (isset($home['port']) ? ':' . $home['port'] : '');
+        $_SERVER['REQUEST_URI'] = isset($home['path']) ? $home['path'] : '/';
+        $_SERVER['HTTPS'] = isset($home['scheme']) && $home['scheme'] === 'https' ? 'on' : 'off';
+        $page = get_option('show_on_front') === 'page' ? absint(get_option('page_on_front')) : 0;
+        $query = new WP_Query($page ? ['page_id' => $page] : ['posts_per_page' => 1]);
+        $GLOBALS['wp_query'] = $query; $GLOBALS['wp_the_query'] = $query;
+        $GLOBALS['post'] = $page ? get_post($page) : null;
+      }
+      ob_start();
+      require_once ABSPATH . WPINC . '/class-wp-admin-bar.php';
+      $class = apply_filters('wp_admin_bar_class', 'WP_Admin_Bar');
+      $bar = new $class();
+      $GLOBALS['wp_admin_bar'] = $bar;
+      $bar->initialize(); $bar->add_menus();
+      do_action_ref_array('admin_bar_menu', [&$bar]);
+      do_action('wp_before_admin_bar_render');
+      $live = []; $flag = $ctx === 'front' ? 'f' : 'a'; $pos = 0;
+      foreach ((array) $bar->get_nodes() as $id => $n) {
+        $pos++;
+        $title = $role !== 'all' && $id === 'user-info' ? self::t('Profile') : $n->title;
+        $lb = !empty($n->group) ? ['', 0] : self::bar_label($id, $title);
+        $live[$id] = ['t' => $lb[0], 'p' => (string) $n->parent, $flag => 1, 'o' . $flag => $pos];
+        if (!empty($n->group)) { $live[$id]['g'] = 1; }
+        if ($lb[1]) { $live[$id]['i'] = 1; }
+      }
+      if ($role === 'all') {
+        $seen = self::raw(self::SEEN);
+        $mine = array_column(self::custom_links(), 'id');
+        foreach ($seen as $id => $row) {
+          if (empty($row[$flag]) || isset($live[$id])) { continue; }
+          if (strpos($id, 'mk-ame-link-') === 0 && !in_array($id, $mine, true)) { continue; }
+          $live[$id] = $row;
+        }
+      }
+      // A child of a removed/inaccessible parent cannot appear in the real toolbar.
+      do {
+        $removed = false;
+        foreach ($live as $id => $row) {
+          if ($row['p'] !== '' && !isset($live[$row['p']])) { unset($live[$id]); $removed = true; }
+        }
+      } while ($removed);
+      return $live;
+    } finally {
+      while (ob_get_level() > $level) { ob_end_clean(); }
+      self::$sim = $sim;
+      foreach ($saved as $key => $state) {
+        if ($state['exists']) { $GLOBALS[$key] = $state['value']; } else { unset($GLOBALS[$key]); }
+      }
+    }
+  }
+  private static function menu_link_suggestions() {
+    global $menu, $submenu;
+    $rows = (array) $menu;
+    foreach ((array) $submenu as $list) { $rows = array_merge($rows, $list); }
+    $links = [];
+    foreach ($rows as $row) {
+      if (empty($row[0]) || empty($row[2]) || !current_user_can($row[1])) { continue; }
+      $slug = html_entity_decode($row[2], ENT_QUOTES, 'UTF-8');
+      $url = preg_match('~^(https?://|[^?]+\.php(?:\?|$))~', $slug) ? $slug : 'admin.php?page=' . $slug;
+      $links[$url] = self::plain($row[0]);
+    }
+    return $links;
+  }
+  private static function bar_heading($ctx) {
+    return '<h2 class=~amx-t~>' . esc_html(self::t($ctx === 'front' ? 'Top bar on the frontend' : 'Top bar in the admin')) . '</h2><p class=~amx-lead~>' . esc_html(self::t($ctx === 'front' ? 'The black bar on your website, shown to logged-in users. Drag to reorder, rename, or hide items.' : 'The black bar at the top of the admin. Drag to reorder, rename, or hide items.')) . '</p>';
   }
 
   private static function bar_list($parent, $kids, $nodes, $sm, &$k, $nested) {
@@ -1057,10 +1156,12 @@ final class MK_Admin_Menu {
   }
 
   private static function tab_top($ctx = 'admin') {
+    $role = self::bar_role_req();
+    if ($role !== 'all' && !self::$scope_menu) { return self::scope_menu_loader(['role' => $role, 'user' => 0], $ctx === 'front' ? 'topfront' : 'top'); }
     self::$barctx = $ctx;
     self::$barico = true;
     MK_AME_Look::ensure();
-    $nodes = self::bar_nodes();
+    $nodes = self::$scope_nodes !== null ? self::$scope_nodes : self::bar_nodes($ctx, $role);
     // Only the items of this bar: the admin bar or the bar on the website, plus the parents they sit in.
     $flag = $ctx === 'front' ? 'f' : 'a';
     $cw = [];
@@ -1075,7 +1176,6 @@ final class MK_Admin_Menu {
       while ($p !== '' && isset($nodes[$p]) && $guard++ < 8) { $keep[$p] = 1; $p = $nodes[$p]['p']; }
     }
     $nodes = array_intersect_key($nodes, $keep);
-    $role = self::bar_role_req();
     $rr = self::bar_roles();
     $locked = $role !== 'all' && !isset($rr[$ctx][$role]);
     $s = self::bar_cfg($ctx, $role);
@@ -1103,8 +1203,8 @@ final class MK_Admin_Menu {
       if ($p === '' || !isset($nodes[$p]) || ($isg && $nodes[$p]['p'] === '')) { $roots[] = $p; }
     }
     usort($roots, function ($a, $b) { return ($a === '' ? 0 : 1) - ($b === '' ? 0 : 1); });
-    $head = '<h2 class=~amx-t~>' . esc_html(self::t($ctx === 'front' ? 'Top bar on the frontend' : 'Top bar in the admin')) . '</h2><p class=~amx-lead~>' . esc_html(self::t($ctx === 'front' ? 'The black bar on your website, shown to logged-in users. Drag to reorder, rename, or hide items.' : 'The black bar at the top of the admin. Drag to reorder, rename, or hide items.')) . '</p>';
-    if ($ctx === 'front') { $head .= '<p class=~description~>' . esc_html(self::t('Only items that have shown up on your website are listed. Visit the website while logged in to see more.')) . '</p>'; }
+    $head = self::bar_heading($ctx);
+    if ($ctx === 'front') { $head .= '<p class=~description~>' . esc_html(self::lang() === 'nl' ? 'De preview gebruikt je homepage. Sommige items veranderen per pagina.' : 'The preview uses your homepage. Some items change with the page you are viewing.') . '</p>'; }
     // The role picker and the icon switch are forms of their own, so they sit outside the list form.
     $head .= self::bar_scope($ctx, $role) . MK_AME_Look::quick_icons($ctx === 'front' ? 'topfront' : 'top');
     $h = self::bar_preview();
@@ -1115,7 +1215,8 @@ final class MK_Admin_Menu {
       if ($p === '' || $p === 'top-secondary') { $h .= '<p class=~ame-addp~><button type=~button~ class=~button ame-add~>' . esc_html(self::t('+ Add menu item')) . '</button></p>'; }
     }
     $dl = '<datalist id=~ame-urls~>';
-    foreach (['plugins.php' => self::t('Plugins'), 'themes.php' => self::t('Themes'), 'edit.php?post_type=page' => self::t('Pages'), 'upload.php' => self::t('Media'), 'users.php' => self::t('Users'), 'options-general.php' => self::t('Settings'), 'site-editor.php' => self::t('Site Editor'), 'admin.php?page=fluent-snippets' => 'Fluent Snippets', 'admin.php?page=fluent-cart' => 'FluentCart', 'admin.php?page=fluent-booking' => 'Fluent Booking'] as $u => $l) { $dl .= '<option value=~' . esc_attr($u) . '~>' . esc_html($l) . '</option>'; }
+    $links = self::$scope_links !== null ? self::$scope_links : self::menu_link_suggestions();
+    foreach ($links as $u => $l) { $dl .= '<option value=~' . esc_attr($u) . '~>' . esc_html($l) . '</option>'; }
     foreach ((array) get_pages(['number' => 50]) as $pg) { $dl .= '<option value=~' . esc_attr(get_permalink($pg)) . '~>' . esc_html($pg->post_title) . '</option>'; }
     $h .= $dl . '</datalist>';
     $hid = '<input type=~hidden~ name=~ctx~ value=~' . $ctx . '~><input type=~hidden~ name=~role~ value=~' . esc_attr($role) . '~>';

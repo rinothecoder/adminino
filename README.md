@@ -6,6 +6,8 @@ Settings live under **Adminino** in the left menu, in a side panel with four gro
 
 The Left Menu Editor can be set per role and per user. A user's own menu goes before the menu of their role, and the role menu goes before the default. Menu items are only hidden, not blocked.
 
+Both admin bar editors can be set per role. Role previews build the native WordPress menu for the selected role, including its capabilities and plugin menus. The frontend admin bar preview uses the homepage; some items vary by page. Saving a role menu preserves settings for items that are currently unavailable to that role.
+
 ## Features
 
 - Reorder, rename and hide items in the left admin menu
