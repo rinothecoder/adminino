@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Adminino
  * Description: Controls the WordPress admin: order, names and visibility of the left menu and the admin bar, a custom color scheme, your logos in the menu and on the login page, and drag and drop post ordering. Settings under Settings > Adminino.
- * Version: 1.3.3
+ * Version: 1.3.4
  * Author: Rino de Boer
  * Requires PHP: 7.4
  * Update URI: https://github.com/rinothecoder/adminino

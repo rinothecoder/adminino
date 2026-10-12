@@ -85,4 +85,4 @@ Rino de Boer
 
 ## Latest release
 
-1.3.3 switches updates to the public `rinothecoder/adminino` repository and preserves the live role/user menu preview fixes. Menu, branding, color and ordering settings stay intact.
+1.3.4 builds both admin bar previews from the selected role's native WordPress menu, restores live hide/show updates in those previews, and automatically discovers new plugin dashboard widgets. Settings for temporarily unavailable menu items and existing plugin data are preserved. Updates use the public `rinothecoder/adminino` repository without a token.
