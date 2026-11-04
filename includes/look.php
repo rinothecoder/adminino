@@ -316,8 +316,8 @@ final class MK_AME_Look {
       $f['bar'] = !empty($p['bar']) ? 1 : 0;
       update_option(self::FONTS, $f);
     } elseif ($sec === 'spacing') {
-      $sp = ['pl' => max(0, min(40, isset($p['pl']) ? (int) $p['pl'] : 0)), 'pr' => max(0, min(40, isset($p['pr']) ? (int) $p['pr'] : 0)), 'gap' => max(0, min(16, isset($p['gap']) ? (int) $p['gap'] : 0))];
-      if ($sp['pl'] || $sp['pr'] || $sp['gap']) { update_option(self::SPACE, $sp); } else { delete_option(self::SPACE); }
+      $sp = ['pl' => max(0, min(40, isset($p['pl']) ? (int) $p['pl'] : 0)), 'pr' => max(0, min(40, isset($p['pr']) ? (int) $p['pr'] : 0)), 'gap' => max(0, min(16, isset($p['gap']) ? (int) $p['gap'] : 0)), 'w' => max(160, min(400, isset($p['w']) ? (int) $p['w'] : 160))];
+      if ($sp['pl'] || $sp['pr'] || $sp['gap'] || $sp['w'] !== 160) { update_option(self::SPACE, $sp); } else { delete_option(self::SPACE); }
     } elseif ($sec === 'icons') {
       $s = self::icons();
       $s['on'] = !empty($p['on']) ? 1 : 0;
@@ -369,14 +369,14 @@ final class MK_AME_Look {
     $src = function ($id) { $u = $id ? wp_get_attachment_url($id) : ''; return $u ? $u : ''; };
     $h = self::css() . self::head('Fonts', 'Use your own font in the whole admin, including the top bar and form fields. The font is loaded from your own website, not from Google.');
     $h .= self::form_open('fonts');
+    $h .= '<div class="amx-icol" style="grid-template-columns:minmax(0,1fr) 420px"><div>';
     $h .= '<div class="amx-row"><label>' . esc_html(self::t('Turn on')) . '</label><div>' . self::toggle('on', $f['on']) . '</div></div>';
     foreach ([['reg', 'Regular', 'Required. A .woff2 file from your Media Library. You can upload it in the window that opens.'], ['bold', 'Bold', 'Optional. Used for headings and bold text. Without it the browser makes the regular font bold.']] as $r) {
       $k = $r[0];
       $h .= '<div class="amx-row"><label>' . esc_html(self::t($r[1])) . '</label><div><div class="amx-fpick" data-k="' . $k . '"><input type="hidden" name="' . $k . '" value="' . (int) $f[$k] . '" data-url="' . esc_attr($src($f[$k])) . '"><button type="button" class="button amx-fbtn">' . esc_html(self::t('Choose font file')) . '</button><span class="amx-fname" data-empty="' . esc_attr(self::t('No file chosen')) . '">' . esc_html($name($f[$k])) . '</span><button type="button" class="button-link button-link-delete amx-fclear"' . ($f[$k] ? '' : ' style="display:none"') . '>' . esc_html(self::t('Remove')) . '</button></div><div class="amx-hint">' . esc_html(self::t($r[2])) . '</div></div></div>';
     }
     $h .= '<div class="amx-row"><label>' . esc_html(self::t('Website')) . '</label><div><label><input type="checkbox" name="bar" value="1"' . ($f['bar'] ? ' checked' : '') . '> ' . esc_html(self::t('Also use this font in the top bar on your website')) . '</label></div></div>';
-    $h .= '<div class="amx-row"><label>' . esc_html(self::t('Preview')) . '</label><div><div class="amx-fpv" id="amx-fpv"><h3>' . esc_html(self::t('The quick brown fox')) . '</h3><p>' . esc_html(self::t('This is how text in your admin looks. Menus, buttons and form fields use the same font.')) . ' <strong>' . esc_html(self::t('Bold text looks like this.')) . '</strong></p><div class="amx-frow"><input type="text" value="' . esc_attr(self::t('A form field')) . '"><button type="button" class="button button-primary">' . esc_html(__('Save Changes')) . '</button></div></div></div></div>';
-    $h .= self::form_close();
+    $h .= self::submit() . '</div><div><div class="amx-cap">' . esc_html(self::t('Preview')) . '</div><div class="amx-fpv" id="amx-fpv"><h3>' . esc_html(self::t('The quick brown fox')) . '</h3><p>' . esc_html(self::t('This is how text in your admin looks. Menus, buttons and form fields use the same font.')) . ' <strong>' . esc_html(self::t('Bold text looks like this.')) . '</strong></p><div class="amx-frow"><input type="text" value="' . esc_attr(self::t('A form field')) . '"><button type="button" class="button button-primary">' . esc_html(__('Save Changes')) . '</button></div></div></div></div></form>';
     $h .= '<script>(function($){if(!$)return;var pv=document.getElementById("amx-fpv");if(!pv)return;var n=0;'
       . 'function apply(){var r=$(".amx-fpick[data-k=reg] input").attr("data-url")||"",b=$(".amx-fpick[data-k=bold] input").attr("data-url")||"",on=$("input[name=on]").prop("checked");if(!on||!r||!window.FontFace){pv.style.fontFamily="";$(pv).find("h3,p,input,button,strong").css("font-family","");return;}n++;var fam="amx-pv-"+n,ls=[new FontFace(fam,"url("+JSON.stringify(r)+")",{weight:b?"100 500":"400"}).load()];if(b){ls.push(new FontFace(fam,"url("+JSON.stringify(b)+")",{weight:"600 900"}).load());}Promise.all(ls).then(function(fs){fs.forEach(function(f){document.fonts.add(f);});pv.style.fontFamily=fam;$(pv).find("h3,p,input,button,strong").css("font-family",fam);}).catch(function(){});}'
       . '$(".amx-fbtn").on("click",function(){var box=$(this).closest(".amx-fpick"),inp=box.find("input");if(!window.wp||!wp.media)return;var fr=wp.media({title:' . wp_json_encode(self::t('Choose font file')) . ',button:{text:' . wp_json_encode(self::t('Use this font')) . '},multiple:false});fr.on("select",function(){var a=fr.state().get("selection").first().toJSON();var fn=a.filename||(a.url||"").split("/").pop();if(!/\.woff2?$/i.test(fn)){alert(' . wp_json_encode(self::t('Please choose a .woff2 or .woff file.')) . ');return;}inp.val(a.id).attr("data-url",a.url);box.find(".amx-fname").text(fn);box.find(".amx-fclear").show();inp.trigger("change");apply();});fr.open();});'
@@ -464,16 +464,16 @@ final class MK_AME_Look {
     $o = is_array($o) ? $o : [];
     $old = isset($o['pad']) ? (int) $o['pad'] : 0;
     $c = function ($k, $max, $d) use ($o) { return max(0, min($max, isset($o[$k]) ? (int) $o[$k] : $d)); };
-    return ['pl' => $c('pl', 40, $old), 'pr' => $c('pr', 40, $old), 'gap' => $c('gap', 16, 0)];
+    return ['pl' => $c('pl', 40, $old), 'pr' => $c('pr', 40, $old), 'gap' => $c('gap', 16, 0), 'w' => max(160, min(400, isset($o['w']) ? (int) $o['w'] : 160))];
   }
   // Side padding makes the menu wider (only when it shows names). The gap is the space between the items.
   private static function spacing_css() {
     $sp = self::spacing();
     $o = '';
-    if ($sp['pl'] || $sp['pr']) {
+    if ($sp['pl'] || $sp['pr'] || $sp['w'] !== 160) {
       $p = $sp['pl'];
       $r = $sp['pr'];
-      $w = 160 + $p + $r;
+      $w = $sp['w'] + $p + $r;
       $nf = 'body:not(.folded) ';
       $o .= '@media screen and (min-width:961px){' . $nf . '#adminmenuback,' . $nf . '#adminmenuwrap,' . $nf . '#adminmenu{width:' . $w . 'px}' . $nf . '#wpcontent,' . $nf . '#wpfooter{margin-left:' . $w . 'px}'
         . $nf . '#adminmenu .wp-submenu{left:' . $w . 'px;width:' . $w . 'px}' . $nf . '#adminmenu li.wp-has-current-submenu .wp-submenu{left:auto}'
@@ -490,11 +490,13 @@ final class MK_AME_Look {
     $sp = self::spacing();
     $h = self::css() . self::head('Left menu spacing', 'Give the left menu more room. Padding makes the black bar wider, the gap adds space between the items. This only changes the left menu.');
     $h .= self::form_open('spacing') . '<div class="amx-icol" style="grid-template-columns:minmax(0,1fr) auto"><div>';
+    $h .= '<div class="amx-row"><label>' . esc_html(self::t('Menu width')) . '</label><div><div class="amx-rng"><input type="range" name="w" min="160" max="400" step="1" value="' . (int) $sp['w'] . '"><output>' . (int) $sp['w'] . 'px</output></div><div class="amx-hint">' . esc_html(self::t('Width of the whole left menu. 160px is the WordPress default. Padding is added on top of this.')) . '</div></div></div>';
     $h .= '<div class="amx-row"><label>' . esc_html(self::t('Padding left')) . '</label><div><div class="amx-rng"><input type="range" name="pl" min="0" max="40" step="1" value="' . (int) $sp['pl'] . '"><output>' . (int) $sp['pl'] . 'px</output></div><div class="amx-hint">' . esc_html(self::t('Extra space in front of the icons. The menu gets wider by the same amount.')) . '</div></div></div>';
     $h .= '<div class="amx-row"><label>' . esc_html(self::t('Padding right')) . '</label><div><div class="amx-rng"><input type="range" name="pr" min="0" max="40" step="1" value="' . (int) $sp['pr'] . '"><output>' . (int) $sp['pr'] . 'px</output></div><div class="amx-hint">' . esc_html(self::t('Extra space after the names.')) . '</div></div></div>';
     $h .= '<div class="amx-row"><label>' . esc_html(self::t('Gap')) . '</label><div><div class="amx-rng"><input type="range" name="gap" min="0" max="16" step="1" value="' . (int) $sp['gap'] . '"><output>' . (int) $sp['gap'] . 'px</output></div><div class="amx-hint">' . esc_html(self::t('Space between the menu items.')) . '</div></div></div>';
-    $h .= '<div class="amx-row"><label></label><div class="amx-hint">' . esc_html(self::t('Set both to 0 for the WordPress default. In the collapsed menu and on small screens the padding is not used.')) . '</div></div>';
+    $h .= '<div class="amx-row"><label></label><div class="amx-hint">' . esc_html(self::t('Set the width to 160 and both paddings to 0 for the WordPress default. In the collapsed menu and on small screens the padding is not used.')) . '</div></div>';
     $h .= self::submit() . '</div><div><div class="amx-cap">' . esc_html(self::t('Preview')) . '</div><div class="amx-spv" id="amx-spv">';
+    if (class_exists('MK_AME_Design')) { $h .= MK_AME_Design::menu_logo_preview(); }
     $first = true;
     $n = 0;
     $ic = self::icons();
@@ -506,12 +508,12 @@ final class MK_AME_Look {
       $first = false;
     }
     $h .= '</div><div class="amx-hint" id="amx-spw"></div></div></div></form>';
-    $h .= '<style>.amx-spv{--p:0px;--r:0px;--g:0px;background:#1d2327;border-radius:8px;padding:6px 0;color:#f0f0f1;width:calc(160px + var(--p) + var(--r));transition:width .15s;box-sizing:border-box}.amx-spv .it{display:flex;align-items:center;gap:10px;height:34px;padding:0 calc(8px + var(--r)) 0 calc(8px + var(--p));margin-bottom:var(--g);font-size:14px}.amx-spv .it.cur{background:var(--wp-admin-theme-color,#2271b1);color:#fff;margin-bottom:0}'
+    $h .= '<style>.amx-spv{--p:0px;--r:0px;--g:0px;--w:160px;background:#1d2327;border-radius:8px;padding:6px 0;color:#f0f0f1;width:calc(var(--w) + var(--p) + var(--r));transition:width .15s;box-sizing:border-box}.amx-spv .it{display:flex;align-items:center;gap:10px;height:34px;padding:0 calc(8px + var(--r)) 0 calc(8px + var(--p));margin-bottom:var(--g);font-size:14px}.amx-spv .it.cur{background:var(--wp-admin-theme-color,#2271b1);color:#fff;margin-bottom:0}'
       . '.amx-spv .ic{display:flex;align-items:center;justify-content:center;width:20px;height:20px;flex:none;color:#a7aaad}.amx-spv .cur .ic{color:#fff}.amx-spv .ic svg{width:18px;height:18px}.amx-spv .ic img{width:18px;height:18px;opacity:.7}.amx-spv .ic .dashicons{font-size:20px;width:20px;height:20px}.amx-spv .ame-svgm{display:block;width:18px;height:18px;background:currentColor;-webkit-mask:var(--m) center/contain no-repeat;mask:var(--m) center/contain no-repeat}.amx-spv .ame-ico-none{width:14px;height:14px;border-radius:50%;background:#a7aaad;opacity:.7}'
       . '.amx-spv .sub{background:#2c3338;padding:7px 0 8px;margin-bottom:var(--g)}.amx-spv .sub div{padding:5px calc(12px + var(--r)) 5px calc(36px + var(--p));font-size:13px;color:#c3c4c7}.amx-spv .sub .c{color:#fff;font-weight:600}</style>';
-    $h .= '<script>(function(){var pv=document.getElementById("amx-spv");if(!pv)return;var pd=document.querySelector("input[name=pl]"),pr=document.querySelector("input[name=pr]"),gp=document.querySelector("input[name=gap]"),w=document.getElementById("amx-spw"),WT=' . wp_json_encode(self::t('Menu width: %spx')) . ';'
-      . 'function run(){pv.style.setProperty("--p",pd.value+"px");pv.style.setProperty("--r",pr.value+"px");pr.nextElementSibling.textContent=pr.value+"px";pv.style.setProperty("--g",gp.value+"px");pd.nextElementSibling.textContent=pd.value+"px";gp.nextElementSibling.textContent=gp.value+"px";w.textContent=WT.replace("%s",160+(+pd.value)+(+pr.value));}'
-      . '[pd,pr,gp].forEach(function(e){e.addEventListener("input",run);});run();})();</script>';
+    $h .= '<script>(function(){var pv=document.getElementById("amx-spv");if(!pv)return;var pd=document.querySelector("input[name=pl]"),pr=document.querySelector("input[name=pr]"),gp=document.querySelector("input[name=gap]"),wd=document.querySelector("input[name=w]"),w=document.getElementById("amx-spw"),WT=' . wp_json_encode(self::t('Menu width: %spx')) . ';'
+      . 'function run(){pv.style.setProperty("--p",pd.value+"px");pv.style.setProperty("--r",pr.value+"px");pr.nextElementSibling.textContent=pr.value+"px";pv.style.setProperty("--g",gp.value+"px");pd.nextElementSibling.textContent=pd.value+"px";gp.nextElementSibling.textContent=gp.value+"px";pv.style.setProperty("--w",wd.value+"px");wd.nextElementSibling.textContent=wd.value+"px";w.textContent=WT.replace("%s",(+wd.value)+(+pd.value)+(+pr.value));}'
+      . '[pd,pr,gp,wd].forEach(function(e){e.addEventListener("input",run);});run();})();</script>';
     return $h;
   }
 

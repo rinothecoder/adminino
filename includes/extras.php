@@ -591,11 +591,13 @@ AMXJS;
         $o = $win('left:20px;top:16px;right:0;bottom:0;border-radius:8px 0 0 0', $inner);
         break;
       case 'dup':
+      case 'dup_before':
         $tt = $titles();
         $dx = $key === 'dup';
+        $cx = false;
         $rows = '<div class="sc-th"><span style="width:50px"></span><span style="flex:1">' . $e(__('Title')) . '</span>' . '' . '</div>';
         foreach ([0, 1] as $i) {
-          $rows .= '<div class="sc-tr" style="height:66px;align-items:flex-start;padding-top:10px"><span class="sc-img" style="margin-right:12px"></span><span style="flex:1"><b class="sc-link0">' . $e($tt[$i]) . '</b><br><span class="sc-ra">' . $e(__('Edit')) . ' | ' . $e(__('Trash')) . ' | ' . $e(__('View')) . ($dx ? ' | <span class="sc-dupl">' . $e(self::t('Duplicate')) . '</span>' : '') . '</span></span>' . ($cx ? '<span class="sc-p" style="width:40px">' . (12 + 9 * $i) . '</span><span class="sc-p" style="width:96px">' . $e(wp_date('j M Y')) . '</span>' : '') . '</div>';
+          $rows .= '<div class="sc-tr" style="height:66px;align-items:flex-start;padding-top:10px"><span class="sc-img" style="margin-right:12px"></span><span style="flex:1"><b class="sc-link0">' . $e($tt[$i]) . '</b><br><span class="sc-ra">' . $e(__('Edit')) . ' | ' . $e(__('Trash')) . ' | ' . $e(__('View')) . ($dx ? ' | <span class="sc-dupl' . ($i === 0 ? ' hl' : '') . '">' . $e(self::t('Duplicate')) . '</span>' : '') . '</span></span>' . ($cx ? '<span class="sc-p" style="width:40px">' . (12 + 9 * $i) . '</span><span class="sc-p" style="width:96px">' . $e(wp_date('j M Y')) . '</span>' : '') . '</div>';
         }
         $o = $win('left:20px;top:16px;right:0;bottom:0;border-radius:8px 0 0 0', '<div class="sc-main"><div class="sc-h1">' . $e(__('Pages')) . '</div><div class="sc-tbl">' . $rows . '</div></div>');
         break;
@@ -681,7 +683,9 @@ AMXJS;
 .amx-sc .sc-chev{float:right;font-weight:400;color:#646970}
 .amx-sc .sc-img{width:40px;height:40px;background:linear-gradient(135deg,#c9ced3,#e3e6e9);flex:none;display:inline-block;border-radius:2px}
 .amx-sc .sc-ra{font-size:12px;color:var(--amx-main)}
-.amx-sc .sc-dupl{background:var(--amx-tint);border-radius:3px;padding:0 5px;font-weight:600;outline:1px solid var(--amx-main)}
+.amx-sc .sc-dupl{position:relative}
+.amx-sc .sc-dupl.hl::after{content:"";position:absolute;left:50%;top:calc(100% + 3px);margin-left:-10px;border-left:10px solid transparent;border-right:10px solid transparent;border-bottom:16px solid var(--amx-main)}
+.amx-sc .sc-dupl.hl::before{content:"";position:absolute;left:50%;top:calc(100% + 19px);margin-left:-2px;width:4px;height:18px;background:var(--amx-main)}
 .amx-sc .sc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .amx-sc .sc-tile{aspect-ratio:1;border-radius:2px;position:relative;overflow:hidden}
 .amx-sc .sc-tile.g0{background:linear-gradient(135deg,#bfc7cf,#e0e4e8)}
@@ -764,7 +768,7 @@ CSS;
     $widgets = self::dashboard_widgets();
     $h = self::head('Dashboard', 'Hide the dashboard widgets your clients do not need. Things are only hidden, nothing is deleted.');
     $h .= self::form_open('dash');
-    $h .= '<div class="amx-sec"><div class="amx-sec-h"><div><b>' . esc_html(self::t('Dashboard widgets')) . '</b><span>' . esc_html(self::t('Choose which widgets are hidden.')) . '</span></div>' . self::toggle('dash_on', $s['dash']['on']) . '</div><div class="amx-sec-b"><div class="amx-chk">';
+    $h .= '<div class="amx-sec"><div class="amx-sec-h"><div><b>' . esc_html(self::t('Turn on')) . '</b></div>' . self::toggle('dash_on', $s['dash']['on']) . '</div><div class="amx-sec-b"><div class="amx-chk">';
     foreach ($widgets as $id => $title) {
       $label = $title;
       $h .= '<label><input type="checkbox" name="hide[]" value="' . esc_attr($id) . '"' . ($s['dash']['on'] && in_array($id, $s['dash']['hide'], true) ? ' checked' : '') . ($s['dash']['on'] ? '' : ' disabled') . '> ' . esc_html($label) . '</label>';
@@ -782,8 +786,8 @@ CSS;
     $s = self::settings();
     $h = self::head('Notices', 'Messages, warnings and ads from plugins appear on every admin page. Keep them out of the way.');
     $h .= self::form_open('notices');
-    $h .= '<div class="amx-sec"><div class="amx-sec-h"><div><b>' . esc_html(self::t('Bundle notices')) . '</b><span>' . esc_html(self::t('Plugin notices go in one small collapsible box, instead of on top of every page.')) . '</span></div>' . self::toggle('notices_on', $s['notices']['on']) . '</div>';
-    $h .= '<div class="amx-sec-b"><p style="margin:0 0 14px;max-width:640px">' . esc_html(self::t('Plugins often add messages, warnings and ads above every admin page. With this on, they are moved into one small box that you can open when you want, so your pages start clean.')) . '</p>';
+    $h .= '<div class="amx-sec"><div class="amx-sec-h"><div><b>' . esc_html(self::t('Turn on')) . '</b></div>' . self::toggle('notices_on', $s['notices']['on']) . '</div>';
+    $h .= '<div class="amx-sec-b">';
     $h .= '<div class="amx-cmp" style="' . self::vars() . '"><div><div class="amx-cap">' . esc_html(self::t('Without bundling')) . '</div><div class="amx-th">' . self::thumb('notices_before') . '</div></div><div><div class="amx-cap">' . esc_html(self::t('With bundling')) . '</div><div class="amx-th">' . self::thumb('notices') . '</div></div></div></div></div>';
     return $h . self::form_close();
   }
@@ -796,8 +800,9 @@ CSS;
       $types[$pt->name] = $pt->labels->name;
     }
     $h = self::head('Duplicate', 'Copy a page or post in one click.');
+    $h .= '<div class="amx-cmp" style="max-width:760px;margin:6px 0 18px;' . self::vars() . '"><div><div class="amx-cap">' . esc_html(self::t('Without the Duplicate link')) . '</div><div class="amx-th">' . self::thumb('dup_before') . '</div></div><div><div class="amx-cap">' . esc_html(self::t('With the Duplicate link')) . '</div><div class="amx-th">' . self::thumb('dup') . '</div></div></div>';
     $h .= self::form_open('dup');
-    $h .= '<div class="amx-sec"><div class="amx-sec-h"><div><b>' . esc_html(self::t('Duplicate')) . '</b><span>' . esc_html(self::t('Adds a Duplicate link under each title.')) . '</span></div>' . self::toggle('dup_on', $s['dup']['on']) . '</div><div class="amx-sec-b"><div class="amx-chk">';
+    $h .= '<div class="amx-sec"><div class="amx-sec-h"><div><b>' . esc_html(self::t('Turn on')) . '</b></div>' . self::toggle('dup_on', $s['dup']['on']) . '</div><div class="amx-sec-b"><div class="amx-chk">';
     foreach ($types as $name => $label) {
       $h .= '<label><input type="checkbox" name="dup_types[]" value="' . esc_attr($name) . '"' . ($s['dup']['on'] && in_array($name, $s['dup']['types'], true) ? ' checked' : '') . ($s['dup']['on'] ? '' : ' disabled') . '> ' . esc_html($label) . '</label>';
     }
@@ -811,7 +816,7 @@ CSS;
     $s = self::settings()['svg'];
     $h = self::head('SVG uploads', 'Allow SVG files in the media library.');
     $h .= self::form_open('media');
-    $h .= '<div class="amx-sec"><div class="amx-sec-h"><div><b>' . esc_html(self::t('SVG uploads')) . '</b><span>' . esc_html(self::t('Allow SVG files in the media library.')) . '</span></div>' . self::toggle('svg_on', $s['on']) . '</div>';
+    $h .= '<div class="amx-sec"><div class="amx-sec-h"><div><b>' . esc_html(self::t('Turn on')) . '</b></div>' . self::toggle('svg_on', $s['on']) . '</div>';
     $h .= '<div class="amx-sec-b"><div class="amx-chk">';
     foreach (wp_roles()->get_names() as $key => $name) {
       $h .= '<label><input type="checkbox" name="svg_roles[]" value="' . esc_attr($key) . '"' . ($s['on'] && in_array($key, $s['roles'], true) ? ' checked' : '') . ($s['on'] ? '' : ' disabled') . '> ' . esc_html(translate_user_role($name)) . '</label>';
