@@ -475,7 +475,7 @@ final class MK_AME_Look {
       $r = $sp['pr'];
       $w = $sp['w'] + $p + $r;
       $nf = 'body:not(.folded) ';
-      $o .= '@media screen and (min-width:961px){' . $nf . '#adminmenuback,' . $nf . '#adminmenuwrap,' . $nf . '#adminmenu{width:' . $w . 'px}' . $nf . '#wpcontent,' . $nf . '#wpfooter{margin-left:' . $w . 'px}'
+      $o .= '@media screen and (min-width:961px){' . $nf . '#adminmenuback,' . $nf . '#adminmenuwrap,' . $nf . '#adminmenu{width:' . $w . 'px}' . $nf . '#wpcontent,' . $nf . '#wpfooter{margin-left:' . $w . 'px}body:not(.folded):not(.is-fullscreen-mode) .interface-interface-skeleton{left:' . $w . 'px}'
         . $nf . '#adminmenu .wp-submenu{left:' . $w . 'px;width:' . $w . 'px}' . $nf . '#adminmenu li.wp-has-current-submenu .wp-submenu{left:auto}'
         . $nf . '#adminmenu a.menu-top{padding-left:' . $p . 'px;padding-right:' . $r . 'px}'
         . $nf . '#adminmenu .wp-has-current-submenu ul>li>a{padding-left:' . (12 + $p) . 'px;padding-right:' . (12 + $r) . 'px}'
