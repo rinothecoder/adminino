@@ -153,7 +153,7 @@ final class MK_AME_Extras {
     if (self::on_own_page()) { return; }
     $label = wp_json_encode(self::t('Notices'));
     echo '<script>jQuery(function($){setTimeout(function(){var sel="#wpbody-content .notice:not(.inline), #wpbody-content div.updated:not(.inline), #wpbody-content div.error:not(.inline), #wpbody-content .update-nag";'
-      . 'var $n=$(sel).filter(function(){return !$(this).closest("#mk-nb").length&&$.trim($(this).text()).length;});if(!$n.length)return;'
+      . 'var $n=$(sel).filter(function(){return !$(this).closest("#mk-nb").length&&!$(this).hasClass("hide-if-js")&&$.trim($(this).text()).length;});if(!$n.length)return;'
       . 'var $b=$("<div id=\\"mk-nb\\"><button type=\\"button\\" id=\\"mk-nb-t\\"></button><div id=\\"mk-nb-list\\"></div></div>");$b.find("#mk-nb-t").text(' . $label . '+" ("+$n.length+")");'
       . '$b.find("#mk-nb-list").append($n);var $a=$(".wp-header-end").first();if($a.length){$a.after($b);}else{$("#wpbody-content > .wrap").first().prepend($b);}'
       . '$b.on("click","#mk-nb-t",function(){$b.toggleClass("open");});},60);});</script>';

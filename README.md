@@ -97,4 +97,4 @@ Rino de Boer
 
 ## Latest release
 
-1.3.5 adds three optional WordPress/MCP abilities for reading, discovering and patching navigation and dashboard settings. Reviewed changes preserve other settings, respect role/user inheritance and require administrator access. Existing menu previews and automatic dashboard widget discovery remain available to people using the interface.
+1.3.6 stops the Notices panel from pulling in the hidden "requires JavaScript" message that WordPress shows on the Media Library grid view. 1.3.5 added three optional WordPress/MCP abilities for reading, discovering and patching navigation and dashboard settings.
