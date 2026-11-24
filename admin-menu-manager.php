@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Adminino
  * Description: Controls the WordPress admin: order, names and visibility of the left menu and the admin bar, a custom color scheme, your logos in the menu and on the login page, and drag and drop post ordering. Settings under Settings > Adminino.
- * Version: 1.3.6
+ * Version: 1.3.7
  * Author: Rino de Boer
  * Requires PHP: 7.4
  * Update URI: https://github.com/rinothecoder/adminino
@@ -55,7 +55,8 @@ final class MK_Admin_Menu {
     add_action('init', [__CLASS__, 'bar_split'], 1);
     add_action('admin_menu', [__CLASS__, 'add_page']);
     add_action('admin_menu', [__CLASS__, 'capture'], 9998);
-    add_action('admin_menu', [__CLASS__, 'apply'], 9999);
+    // After the plugins that sort their own submenu at 9999 (FluentCart), so a menu change made here wins over their order.
+    add_action('admin_menu', [__CLASS__, 'apply'], 10000);
     add_filter('custom_menu_order', [__CLASS__, 'use_order']);
     add_filter('menu_order', [__CLASS__, 'order']);
     add_filter('add_menu_classes', [__CLASS__, 'sep_back'], 99);
@@ -514,22 +515,42 @@ final class MK_Admin_Menu {
       foreach ($list as $t) { $m[$t['slug']] = $t; }
       $items = $submenu[$parent];
       ksort($items, SORT_NUMERIC);
+      // Only touch a plugin's sub-pages when something was really changed there: a new order, a new name or a hidden item.
+      // The saved list also holds every untouched plugin in its native order. Rebuilding those would only break plugins that
+      // sort their own submenu (FluentCart sends its top link to Categories when its item keys are gone).
+      $touched = false;
       foreach ($items as $k => $it) {
         $slug = $it[2];
         if (!isset($m[$slug])) { continue; }
         $t = $m[$slug];
-        if ($t['title'] !== '') { $items[$k][0] = self::retitle($it[0], $t['title']); }
-        if (!empty($t['hidden']) && !self::locked($slug) && empty($it[4])) { $items[$k][4] = 'mk-ame-hidden'; }
+        if ($t['title'] !== '') { $items[$k][0] = self::retitle($it[0], $t['title']); $touched = true; }
+        if (!empty($t['hidden']) && !self::locked($slug) && empty($it[4])) { $items[$k][4] = 'mk-ame-hidden'; $touched = true; }
+      }
+      // Is the saved order just the native order? Judge that against the list captured before other plugins sorted it.
+      $nat = (self::$orig && isset(self::$orig['submenu'][$parent])) ? self::$orig['submenu'][$parent] : $items;
+      ksort($nat, SORT_NUMERIC);
+      $natSlugs = [];
+      foreach ($nat as $nit) { $natSlugs[] = $nit[2]; }
+      $want = [];
+      foreach ($list as $t) { if (in_array($t['slug'], $natSlugs, true) && !in_array($t['slug'], $want, true)) { $want[] = $t['slug']; } }
+      foreach ($natSlugs as $ns) { if (!in_array($ns, $want, true)) { $want[] = $ns; } }
+      if ($want === $natSlugs) {
+        // Same order as native: only a new name or a hidden item changed, so keep the plugin's own order.
+        if ($touched) { $cur = []; foreach ($submenu[$parent] as $k => $_) { $cur[$k] = $items[$k]; } $submenu[$parent] = $cur; }
+        continue;
       }
       $out = []; $used = [];
       foreach ($list as $t) {
         foreach ($items as $k => $it) {
-          if ($it[2] === $t['slug'] && !isset($used[$k])) { $out[] = $it; $used[$k] = 1; break; }
+          if ($it[2] === $t['slug'] && !isset($used[$k])) { $out[$k] = $it; $used[$k] = 1; break; }
         }
       }
-      foreach ($items as $k => $it) { if (!isset($used[$k])) { $out[] = $it; } }
+      foreach ($items as $k => $it) { if (!isset($used[$k])) { $out[$k] = $it; } }
+      // Keep the item keys a plugin gave its own pages (dashboard, orders...); other plugins read them. Only numeric keys are renumbered.
       $new = []; $i = 10;
-      foreach ($out as $it) { $new[$i] = $it; $i += 10; }
+      foreach ($out as $k => $it) {
+        if (is_string($k) && !ctype_digit($k)) { $new[$k] = $it; } else { $new[$i] = $it; $i += 10; }
+      }
       $submenu[$parent] = $new;
     }
   }

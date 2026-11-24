@@ -215,6 +215,17 @@ final class MK_AME_Look {
     }
     $o .= self::icons_css() . self::spacing_css();
     if ($o !== '') { echo '<style id="mk-ame-look">' . $o . '</style>'; }
+    echo self::width_fix_js();
+  }
+  // Plugins that pin their own bars next to the menu with a fixed 160px (the default menu width) get the real width. Only needed when the menu is wider than the default.
+  private static function width_fix_js() {
+    $sp = self::spacing();
+    $w = $sp['w'] + $sp['pl'] + $sp['pr'];
+    if ($w === 160) { return ''; }
+    $js = <<<'JS'
+(function(){var W=__W__;var skip=/#adminmenu|#wpcontent|#wpfooter|#wpadminbar|interface-interface-skeleton/;var done={};function walk(rules,cond,out){for(var i=0;i<rules.length;i++){var r=rules[i];if(r.type===1){var sel=r.selectorText||'';if(skip.test(sel)){continue;}var st=r.style,d=[];['width','max-width'].forEach(function(p){var v=st.getPropertyValue(p);if(/calc[(][ ]*100(%|vw)[ ]*-[ ]*160px[ ]*[)]/.test(v)){d.push(p+':'+v.replace('160px',W+'px')+' !important');}});if(st.getPropertyValue('left').trim()==='160px'&&/fixed|absolute/.test(st.getPropertyValue('position'))){d.push('left:'+W+'px !important');}if(d.length){var s=sel.split(',').map(function(x){x=x.trim();return /^body/.test(x)?x.replace('body','body:not(.folded)'):'body:not(.folded) '+x;}).join(',');var css='@media screen and (min-width:961px){'+s+'{'+d.join(';')+'}}';if(cond){css='@media '+cond+'{'+css+'}';}out.push(css);}}else if(r.type===4){try{walk(r.cssRules,r.conditionText||r.media.mediaText,out);}catch(e){}}}}function run(){var out=[];for(var i=0;i<document.styleSheets.length;i++){var s=document.styleSheets[i];if(s.ownerNode&&s.ownerNode.id==='mk-ame-widthfix'){continue;}var rules;try{rules=s.cssRules;}catch(e){continue;}if(rules){walk(rules,'',out);}}var css=out.join('');if(css===''||done.css===css){return;}done.css=css;var el=document.getElementById('mk-ame-widthfix');if(!el){el=document.createElement('style');el.id='mk-ame-widthfix';document.head.appendChild(el);}el.textContent=css;}document.addEventListener('DOMContentLoaded',run);window.addEventListener('load',function(){run();setTimeout(run,1500);});})();
+JS;
+    return '<script id="mk-ame-widthfix-js">' . str_replace('__W__', (string) (int) $w, $js) . '</script>';
   }
   public static function front_head() {
     if (!is_admin_bar_showing()) { return; }
@@ -476,6 +487,8 @@ final class MK_AME_Look {
       $w = $sp['w'] + $p + $r;
       $nf = 'body:not(.folded) ';
       $o .= '@media screen and (min-width:961px){' . $nf . '#adminmenuback,' . $nf . '#adminmenuwrap,' . $nf . '#adminmenu{width:' . $w . 'px}' . $nf . '#wpcontent,' . $nf . '#wpfooter{margin-left:' . $w . 'px}body:not(.folded):not(.is-fullscreen-mode) .interface-interface-skeleton{left:' . $w . 'px}'
+        // FluentCart pins its top bar and save bar to the right with width: 100% - 160px (the default menu width). Give them the real width.
+        . $nf . '#wpbody-content #fct_admin_menu_holder .fct_admin_menu_wrap,' . $nf . '.fct-save-bar{width:calc(100% - ' . $w . 'px)}'
         . $nf . '#adminmenu .wp-submenu{left:' . $w . 'px;width:' . $w . 'px}' . $nf . '#adminmenu li.wp-has-current-submenu .wp-submenu{left:auto}'
         . $nf . '#adminmenu a.menu-top{padding-left:' . $p . 'px;padding-right:' . $r . 'px}'
         . $nf . '#adminmenu .wp-has-current-submenu ul>li>a{padding-left:' . (12 + $p) . 'px;padding-right:' . (12 + $r) . 'px}'
